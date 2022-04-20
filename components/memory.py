@@ -2,20 +2,20 @@ import numpy as np
 
 
 class ModelBasedMemory:
-    def __init__(self, agent, batch_size, past_window_size, obs_dim, particles=20, popsize=50):
+    def __init__(self, agent, batch_size, hist_length, obs_dim, particles=20, popsize=50):
         self.state_actions = []
         self.observations = []
         self.batch_size = batch_size
-        self.past_window_size = past_window_size
+        self.hist_length = hist_length
         self.obs_dim = obs_dim # obs_dim = time+dim
-        self.previous = np.zeros(shape=(obs_dim * self.past_window_size,))
+        self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
         self.agent = agent
 
         if self.agent == 'pets':
-            self.previous_sampled = np.zeros(shape=(particles, popsize, obs_dim * self.past_window_size))
+            self.previous_sampled = np.zeros(shape=(particles, popsize, obs_dim * self.hist_length))
 
         if self.agent == 'mpc':
-            self.previous_sampled = np.zeros(shape=(popsize, self.obs_dim * self.past_window_size))
+            self.previous_sampled = np.zeros(shape=(popsize, self.obs_dim * self.hist_length))
 
     def generate_batches(self):
         '''
@@ -51,7 +51,7 @@ class ModelBasedMemory:
     def store_previous_samples(self, state_matrix):
         '''
         Stores states sampled using trajectory sampler (TS) in working memory for sampler propogation
-        :param state_matrix: Tensor of states sampled using TS of shape (particles, popsize, obs_dim*past_window_size)
+        :param state_matrix: Tensor of states sampled using TS of shape (particles, popsize, obs_dim*hist_length)
         :return:
         '''
         if self.agent == 'pets':
@@ -71,15 +71,15 @@ class ModelBasedMemory:
         self.observations = []
 
 class ModelFreeMemory:
-    def __init__(self, batch_size, past_window_size, obs_dim):
-        self.model_inputs = [] # states concat with previous past_window_size * states
+    def __init__(self, batch_size, hist_length, obs_dim):
+        self.model_inputs = [] # states concat with previous hist_length * states
         self.probs = []
         self.vals = []
         self.actions = []
         self.rewards = []
         self.batch_size = batch_size
         self.obs_dim = obs_dim
-        self.previous = np.zeros(shape=(obs_dim * past_window_size,))
+        self.previous = np.zeros(shape=(obs_dim * hist_length,))
 
     def generate_batches(self):
         '''
@@ -106,7 +106,7 @@ class ModelFreeMemory:
     def store_memory(self, model_input, action, prob, value):
         '''
         Stores state, action, log_prob of action, critic value of action in memory
-        :return stored state: normalised state of shape ((obs_dim + time_dim) * past_window_size,)
+        :return stored state: normalised state of shape ((obs_dim + time_dim) * hist_length,)
         :return stored action: normalised array of actions of shape (act_dim,)
         :return log_prob: log_prob of shape (1,)
         :return value: critic value of state (1,)

@@ -12,7 +12,7 @@ from .base import Base
 
 class Agent(Base):
     def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins=180, alpha=0.0003,
-                 n_epochs=25, batch_size=32, horizon=20, beta=1, theta=1000, phi=1, past_window_size=2, particles=20,
+                 n_epochs=25, batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=2, particles=20,
                  expl_del=0.05, output_norm_range=[-1, 1], popsize=25, include_grid=True):
 
         if env_name not in ["MixedUseFanFCU-v0", "SeminarcenterThermostat-v0", "OfficesThermostat-v0",
@@ -70,7 +70,7 @@ class Agent(Base):
         self.phi = phi
         self.n_epochs = n_epochs
         self.batch_size = batch_size
-        self.past_window_size = past_window_size
+        self.hist_length = hist_length
         self.horizon = horizon
         self.output_norm_range = output_norm_range
         self.output_norm_low = T.tensor([np.min(self.output_norm_range)], dtype=T.float).to(self.device)
@@ -89,7 +89,7 @@ class Agent(Base):
             delta = (upper[key] - lower[key]) * self.expl_del
             self.deltas[key] = delta
         self.memory = ModelBasedMemory(agent=self.agent_name, batch_size=self.batch_size,
-                                       past_window_size=self.past_window_size, obs_dim=self.obs_dim + self.time_dim,
+                                       hist_length=self.hist_length, obs_dim=self.obs_dim + self.time_dim,
                                        particles=self.particles, popsize=self.popsize)
         self.include_grid = include_grid
 
@@ -102,7 +102,7 @@ class Agent(Base):
                                    (self.horizon, self.act_dim)).to(self.device)
 
         ### CONFIGURE MODELS ###
-        self.network_input_dims = ((1 + self.past_window_size) * (self.obs_dim + self.time_dim)) + self.act_dim
+        self.network_input_dims = ((1 + self.hist_length) * (self.obs_dim + self.time_dim)) + self.act_dim
 
         self.model_1 = ProbabilisticNetwork(input_dims=self.network_input_dims, output_dims=self.obs_dim,
                                             chkpt_path=self.model_1_path, alpha=alpha

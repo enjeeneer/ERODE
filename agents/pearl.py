@@ -128,7 +128,7 @@ class Agent(Base):
                          self.deltas, self.phi, self.include_grid, self.c02_reward_key, self.minutes_per_step,
                          self.obs_space, self.cont_actions)
 
-    def trajectory_sampler(self, init_state, act_seqs, planning_test=False):
+    def trajectory_sampler(self, init_state, act_seqs):
         '''
         Takes action sequences and propogates each P times through models to horizon H.
         :param init_state: numpy array of most recent observation
@@ -136,23 +136,14 @@ class Agent(Base):
         :return particle state trajectories: array of trajectories of shape: (particles, popsize, horizon, obs_dim + 4)
         '''
         # detach action sequences from computational graph
-        if not planning_test:
-            act_seqs = act_seqs.clone().cpu().detach().numpy()
+        act_seqs = act_seqs.clone().cpu().detach().numpy()
 
         particle_act_seq = np.tile(act_seqs, (self.particles, 1, 1, 1))  # duplicate action sequence by no particles
         # convert state to tensor and duplicate
 
-        if planning_test:
-            state_tile = np.tile(init_state, (self.particles, 1, 1))  # duplicate state
-        else:
-            state_tile = np.tile(init_state, (self.particles, self.optimizer.popsize, 1))  # duplicate state
+        state_tile = np.tile(init_state, (self.particles, self.optimizer.popsize, 1))  # duplicate state
         # instantiate trajectory tensor
-        if planning_test:
-            trajs = np.zeros(
-                shape=(self.particles, 1, self.horizon, self.obs_dim + self.time_dim))
-
-        else:
-            trajs = np.zeros(
+        trajs = np.zeros(
                 shape=(self.particles, self.optimizer.popsize, self.horizon, self.obs_dim + self.time_dim))
 
         for i in range(self.horizon):
@@ -178,11 +169,7 @@ class Agent(Base):
                 state_ = T.where(state_ < self.output_norm_low, self.output_norm_low, state_)
                 state_ = T.where(state_ > self.output_norm_high, self.output_norm_high, state_)
 
-                if planning_test:
-                    state_ = self.normaliser.update_time(state_tensor=state_, init_date=init_date, \
-                                                         init_time=init_time, TS_step=i)
-                else:
-                    state_ = self.normaliser.update_time(state_tensor=state_, init_date=self.TS_init_date, \
+                state_ = self.normaliser.update_time(state_tensor=state_, init_date=self.TS_init_date, \
                                                          init_time=self.TS_init_time, TS_step=i)
 
                 state_tile[self.model_idxs[j]] = state_.cpu().detach().numpy()

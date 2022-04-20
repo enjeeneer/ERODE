@@ -2,19 +2,24 @@ import numpy as np
 
 
 class ModelBasedMemory:
-    def __init__(self, agent, batch_size, hist_length, obs_dim, particles=20, popsize=50):
+    def __init__(self, agent, batch_size, hist_length, obs_dim, act_dim, particles=20, popsize=50):
         self.state_actions = []
         self.observations = []
         self.batch_size = batch_size
         self.hist_length = hist_length
-        self.obs_dim = obs_dim # obs_dim = time+dim
-        self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
+        self.obs_dim = obs_dim # obs_dim + time_dim
         self.agent = agent
+        self.state_act_dim = obs_dim + act_dim
 
         if self.agent == 'pets':
+            self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
             self.previous_sampled = np.zeros(shape=(particles, popsize, obs_dim * self.hist_length))
 
+        if self.agent == 'erode':
+            self.previous = np.zeros(shape=(hist_length, self.state_act_dim))
+
         if self.agent == 'mpc':
+            self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
             self.previous_sampled = np.zeros(shape=(popsize, self.obs_dim * self.hist_length))
 
     def generate_batches(self):

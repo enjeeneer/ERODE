@@ -312,7 +312,10 @@ class LatentODE(nn.Module):
 
     def predict_next_state(self, history, train=True):
         """
-        :param history: array of shape (batch_size, input_traj_length + 1 (includes current state), state_action_dim)
+        if train
+        :param history: array of shape (batch_size, hist_length + 1 (includes current state), state_action_dim)
+        else
+        :param history: array of shape (particles, popsize, hist_length + 1 (includes current state), state_action_dim)
         :return:
         """
         if train:

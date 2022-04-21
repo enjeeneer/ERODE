@@ -2,7 +2,7 @@ import os
 import numpy as np
 import torch as T
 from components.networks import LatentODE
-from components.memory import ModelBasedMemory
+from components.memory import ErodeMemory
 from components.optimizers import CEM
 from utils.utils import Normalize
 import config.env_configs as env_configs
@@ -82,10 +82,9 @@ class Agent(Base):
         self.atol = atol
         self.state_dim = len(self.obs_space)
         self.act_dim = len(self.act_space)
-        self.state_act_dim = self.state_dim + self.act_dim
-        self.memory = ModelBasedMemory(agent=self.agent_name, batch_size=self.batch_size, hist_length=self.hist_length,
-                                       obs_dim=self.state_dim + self.time_dim, particles=self.particles,
-                                       popsize=self.popsize)
+        self.state_act_dim = self.state_dim + self.time_dim + self.act_dim
+        self.memory = ErodeMemory(agent=self.agent_name, batch_size=self.batch_size, hist_length=self.hist_length,
+                                       obs_dim=self.state_dim+self.time_dim, state_act_dim=self.state_act_dim)
 
         ### CONFIGURE MODELS ###
         network_input_dims = ((1 + self.hist_length) * (self.state_dim + self.time_dim)) + self.act_dim
@@ -230,7 +229,10 @@ class Agent(Base):
         :return:
         '''
 
+        print('...updating model parameters...')
         # generate batches
+
+
         day_trajs = trajs[(self.day * self.steps_per_day):(self.day + 1) * self.steps_per_day, :, :]
         train_batches = self.data_helper.generate_batches(trajs=day_trajs, batch_size=self.batch_size)
         train_torch = T.from_numpy(train_batches).to(self.device).to(T.float)
@@ -239,6 +241,9 @@ class Agent(Base):
         n_batches = train_input.shape[0]
 
         for epoch in range(self.epochs):
+            if epoch % 5 == 0:
+                print('learning epoch:', epoch)
+
             avg_loss = 0.0
             self.kl_coef = 1 - 0.99 ** self.kl_cnt
             self.kl_cnt += 1

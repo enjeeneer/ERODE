@@ -15,9 +15,6 @@ class ModelBasedMemory:
             self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
             self.previous_sampled = np.zeros(shape=(particles, popsize, obs_dim * self.hist_length))
 
-        if self.agent == 'erode':
-            self.previous = np.zeros(shape=(hist_length, self.state_act_dim))
-
         if self.agent == 'mpc':
             self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
             self.previous_sampled = np.zeros(shape=(popsize, self.obs_dim * self.hist_length))
@@ -153,3 +150,53 @@ class ModelFreeMemory:
         '''
         self.previous[:self.obs_dim] = self.previous[self.obs_dim:]
         self.previous[self.obs_dim:] = state
+
+class ErodeMemory:
+    def __init__(self, agent, batch_size, hist_length, obs_dim, state_act_dim):
+        self.state_actions = []
+        self.observations = []
+        self.batch_size = batch_size
+        self.hist_length = hist_length
+        self.obs_dim = obs_dim # obs_dim + time_dim
+        self.agent = agent
+        self.state_act_dim = state_act_dim
+        self.previous = np.zeros(shape=(hist_length, self.state_act_dim))
+
+    def generate_batches(self):
+        '''
+        Generates batches of training data for dynamical model from previously executed state actions and observations
+        :return: array of all stored state actions of shape (datapoints, act_dim+obs_dim)
+        :return: array of all stored observations of shape (datapoints, obs_dim)
+        :return: array of batch indices of shape (datapoints/batch_size, batch_size)
+        '''
+        datapoints = len(self.state_actions)
+        batch_start = np.arange(0, datapoints, self.batch_size)
+        indices = np.random.choice(datapoints, size=datapoints, replace=True)
+        batches = [indices[i:i + self.batch_size] for i in batch_start]
+
+        return np.array(self.state_actions), np.array(self.observations), batches
+
+    def store_memory(self, state_action, observation):
+        '''
+        Stores state action and observation in memory
+        :param state_action: normalised array of state_actions of shape (act_dim+obs_dim,)
+        :param observation: normalised array of observations of shape (observation,)
+        '''
+        self.state_actions.append(state_action)
+        self.observations.append(observation)
+
+    def store_state_action(self, state_action):
+        '''
+        Stores state action in previous memory
+        :param state_action: normalised array of state_actions of shape (act_dim+obs_dim+time_dim,)
+        '''
+        self.previous[:self.hist_length-1] = self.previous[1:]
+        self.previous[-1] = state_action
+
+    def clear_memory(self):
+        '''
+        Clears working memory after each learning procedure.
+        :return:
+        '''
+        self.state_actions = []
+        self.observations = []

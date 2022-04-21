@@ -55,8 +55,8 @@ class ModelBasedMemory:
         Takes current state and stores in working memory for use in future action selection
         :param state_tensor:
         '''
-        self.previous[:self.window_size - 1] = self.previous[1:]
-        self.previous[-1] = state_tensor
+        self.window[self.obs_dim:] = self.window[:(self.window_size - 1) * self.obs_dim]
+        self.window[:self.obs_dim] = state_tensor
 
     def store_previous_samples(self, state_matrix):
         '''
@@ -200,8 +200,8 @@ class ErodeMemory:
         Takes current state and stores in window for use in creating observation (concat of prev states)
         :param state: array of shape (obs_dim)
         '''
-        self.window[:self.window_size - 1] = self.window[1:]
-        self.window[-1] = state
+        self.window[self.obs_dim:] = self.window[:(self.window_size-1)*self.obs_dim]
+        self.window[:self.obs_dim] = state
 
     def clear_memory(self):
         '''

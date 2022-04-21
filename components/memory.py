@@ -195,13 +195,14 @@ class ErodeMemory:
         self.history[:self.hist_length-1] = self.history[1:]
         self.history[-1] = window
 
-    def store_previous_state(self, state):
+    def store_window(self, state):
         '''
         Takes current state and stores in window for use in creating observation (concat of prev states)
         :param state: array of shape (obs_dim)
         '''
         self.window[self.obs_dim:] = self.window[:(self.window_size-1)*self.obs_dim]
         self.window[:self.obs_dim] = state
+
 
     def clear_memory(self):
         '''

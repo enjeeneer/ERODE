@@ -24,6 +24,7 @@ class Base:
         :param observation: dict
         :param model_input: tensor of input to model of shape (network_input_dims,)
         '''
+        'ERROR NOT USING ERODE REMEMBER FUNCTION'
         obs_norm = self.normaliser.outputs(observation, env=self.env, for_memory=True)
         self.memory.store_memory(state_action=model_input, observation=obs_norm)
 

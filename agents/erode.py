@@ -161,7 +161,6 @@ class Agent(Base):
         window = np.tile(self.memory.window, (self.particles, self.popsize, 1)) # [part, pop, window_size*state_dim]
         hist = np.tile(self.memory.history, (self.particles, self.popsize, 1, 1)) # [part, pop, hist_length, state_act_dim]
 
-
         # initialise trajectory array
         trajs = np.zeros(shape=(self.particles, self.CEM.popsize, self.horizon, self.state_dim + self.time_dim))
 
@@ -227,12 +226,12 @@ class Agent(Base):
 
             action_dict = self.normaliser.revert_actions(action[0].cpu().detach().numpy())
 
-        self.memory.store_previous_state(obs)
+        self.memory.store_window(obs)
         self.memory.store_history(window)
 
         return action_dict, model_input
 
-    def learn(self, trajs):
+    def learn(self):
         '''
         :param trajs: batched array of input trajectories of shape (n_batches, batch_size, state_action_dim)
         :param traj_batch: array of shape (batch_size, traj_length, state_action_dim)
@@ -241,14 +240,8 @@ class Agent(Base):
 
         print('...updating model parameters...')
         # generate batches
-
-
-        day_trajs = trajs[(self.day * self.steps_per_day):(self.day + 1) * self.steps_per_day, :, :]
-        train_batches = self.data_helper.generate_batches(trajs=day_trajs, batch_size=self.batch_size)
-        train_torch = T.from_numpy(train_batches).to(self.device).to(T.float)
-        train_input = train_torch[:, :, :-1, :self.state_act_dim]
-        train_output = train_torch[:, :, -1, self.act_dim:self.state_act_dim]
-        n_batches = train_input.shape[0]
+        model_inp_array, obs_array, batches = self.memory.generate_batches()
+        n_batches = len(batches)
 
         for epoch in range(self.epochs):
             if epoch % 5 == 0:
@@ -257,18 +250,19 @@ class Agent(Base):
             avg_loss = 0.0
             self.kl_coef = 1 - 0.99 ** self.kl_cnt
             self.kl_cnt += 1
-            for input_batch, output_batch in zip(train_input, train_output):
+
+            for batch in batches:
+                input_batch = T.tensor(model_inp_array[batch], dtype=T.float).to(self.device)
+                output_batch = T.tensor(obs_array[batch], dtype=T.float).to(self.device)
+
                 pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch)
                 loss = self.model.loss(pred_state_mean, output_batch, z_dists, self.kl_coef)
-
                 self.optimiser.zero_grad()
                 loss.backward()
                 self.optimiser.step()
                 avg_loss += loss / n_batches
 
-            #print('Epoch{0} | loss = {1:.5f}'.format(epoch, avg_loss))
-
-        #self.save_model()
+        self.memory.clear_memory()
 
     def reward_estimator(self, init_state: np.array, act_seqs: T.tensor):
         '''
@@ -315,6 +309,11 @@ class Agent(Base):
             exp_reward = energy_mean + temp_mean
 
         return exp_reward
+
+    def remember(self, observation, model_input):
+        print('using erode remember function')
+        obs_norm = self.normaliser.outputs(observation, env=self.env, for_memory=True)
+        self.memory.store_memory(model_input=model_input, observation=obs_norm)
 
     def save_model(self):
         '''

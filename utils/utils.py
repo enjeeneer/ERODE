@@ -214,7 +214,7 @@ class Normalize:
         cos_date = np.cos(2 * np.pi * (days / 365))
 
         # concat to tensor
-        if self.agent == 'pets':
+        if self.agent == 'pets' or self.agent == 'erode':
             time_tensor = T.tile(T.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
                                  [state_tensor.shape[0], state_tensor.shape[1], 1]).to(self.device)

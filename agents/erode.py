@@ -214,14 +214,12 @@ class Agent(Base):
             self.TS_init_time = (min, hour)
             self.TS_init_date = (day, month)
 
-            self.memory.previous_sampled = np.tile(self.memory.previous, (self.particles, self.optimizer.popsize, 1))
             actions = self.optimizer.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
-            # self.cem_init_mean = actions
 
             action_dict = self.normaliser.revert_actions(actions[0].cpu().detach().numpy())
             model_input = np.concatenate((actions[0].cpu().detach().numpy(), obs, self.memory.previous))
 
-        self.memory.store_previous(obs)  # store observation in model memory
+        self.memory.store_state_action(np.concatenate(actions, obs))
 
         return action_dict, model_input
 

@@ -45,13 +45,21 @@ class ModelBasedMemory:
         self.state_actions.append(state_action)
         self.observations.append(observation)
 
+    def store_state_action(self, state_action):
+        '''
+        Stores state action in previous memory
+        :param state_action: normalised array of state_actions of shape (act_dim+obs_dim+time_dim,)
+        '''
+        self.previous[:self.hist_length-1] = self.previous[1:]
+        self.previous[-1] = state_action
+
     def store_previous(self, state_tensor):
         '''
         Takes current state and stores in working memory for use in future action selection
         :param state_tensor:
         '''
-        self.previous[:self.obs_dim] = self.previous[self.obs_dim:]
-        self.previous[self.obs_dim:] = state_tensor
+        self.previous[:self.hist_length - 1] = self.previous[1:]
+        self.previous[-1] = state_tensor
 
     def store_previous_samples(self, state_matrix):
         '''

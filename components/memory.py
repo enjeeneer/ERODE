@@ -2,22 +2,22 @@ import numpy as np
 
 
 class ModelBasedMemory:
-    def __init__(self, agent, batch_size, hist_length, obs_dim, act_dim, particles=20, popsize=50):
+    def __init__(self, agent, batch_size, window_size, obs_dim, act_dim, particles=20, popsize=50):
         self.state_actions = []
         self.observations = []
         self.batch_size = batch_size
-        self.hist_length = hist_length
+        self.window_size = window_size
         self.obs_dim = obs_dim # obs_dim + time_dim
         self.agent = agent
         self.state_act_dim = obs_dim + act_dim
 
         if self.agent == 'pets':
-            self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
-            self.previous_sampled = np.zeros(shape=(particles, popsize, obs_dim * self.hist_length))
+            self.previous = np.zeros(shape=(obs_dim * self.window_size,))
+            self.previous_sampled = np.zeros(shape=(particles, popsize, obs_dim * self.window_size))
 
         if self.agent == 'mpc':
-            self.previous = np.zeros(shape=(obs_dim * self.hist_length,))
-            self.previous_sampled = np.zeros(shape=(popsize, self.obs_dim * self.hist_length))
+            self.previous = np.zeros(shape=(obs_dim * self.window_size,))
+            self.previous_sampled = np.zeros(shape=(popsize, self.obs_dim * self.window_size))
 
     def generate_batches(self):
         '''
@@ -47,7 +47,7 @@ class ModelBasedMemory:
         Stores state action in previous memory
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim+time_dim,)
         '''
-        self.previous[:self.hist_length-1] = self.previous[1:]
+        self.previous[:self.window_size-1] = self.previous[1:]
         self.previous[-1] = state_action
 
     def store_previous(self, state_tensor):
@@ -55,7 +55,7 @@ class ModelBasedMemory:
         Takes current state and stores in working memory for use in future action selection
         :param state_tensor:
         '''
-        self.previous[:self.hist_length - 1] = self.previous[1:]
+        self.previous[:self.window_size - 1] = self.previous[1:]
         self.previous[-1] = state_tensor
 
     def store_previous_samples(self, state_matrix):
@@ -81,7 +81,7 @@ class ModelBasedMemory:
         self.observations = []
 
 class ModelFreeMemory:
-    def __init__(self, batch_size, hist_length, obs_dim):
+    def __init__(self, batch_size, window_size, obs_dim):
         self.model_inputs = [] # states concat with previous hist_length * states
         self.probs = []
         self.vals = []
@@ -89,7 +89,7 @@ class ModelFreeMemory:
         self.rewards = []
         self.batch_size = batch_size
         self.obs_dim = obs_dim
-        self.previous = np.zeros(shape=(obs_dim * hist_length,))
+        self.previous = np.zeros(shape=(obs_dim * window_size,))
 
     def generate_batches(self):
         '''
@@ -152,15 +152,17 @@ class ModelFreeMemory:
         self.previous[self.obs_dim:] = state
 
 class ErodeMemory:
-    def __init__(self, agent, batch_size, hist_length, obs_dim, state_act_dim):
-        self.state_actions = []
+    def __init__(self, agent, batch_size, window_size, hist_length, obs_dim, state_act_dim):
+        self.model_inputs = []
         self.observations = []
         self.batch_size = batch_size
+        self.window_size = window_size
         self.hist_length = hist_length
         self.obs_dim = obs_dim # obs_dim + time_dim
         self.agent = agent
         self.state_act_dim = state_act_dim
-        self.previous = np.zeros(shape=(hist_length, self.state_act_dim))
+        self.window = np.zeros(shape=(self.obs_dim*self.window_size)) # number of prev states used to create obs
+        self.history = np.zeros(shape=(hist_length, self.state_act_dim))
 
     def generate_batches(self):
         '''
@@ -169,29 +171,37 @@ class ErodeMemory:
         :return: array of all stored observations of shape (datapoints, obs_dim)
         :return: array of batch indices of shape (datapoints/batch_size, batch_size)
         '''
-        datapoints = len(self.state_actions)
+        datapoints = len(self.model_inputs)
         batch_start = np.arange(0, datapoints, self.batch_size)
         indices = np.random.choice(datapoints, size=datapoints, replace=True)
         batches = [indices[i:i + self.batch_size] for i in batch_start]
 
-        return np.array(self.state_actions), np.array(self.observations), batches
+        return np.array(self.model_inputs), np.array(self.observations), batches
 
-    def store_memory(self, state_action, observation):
+    def store_memory(self, model_input, observation):
         '''
-        Stores state action and observation in memory
+        Stores model_input and correlating observation in memory
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim,)
         :param observation: normalised array of observations of shape (observation,)
         '''
-        self.state_actions.append(state_action)
+        self.model_inputs.append(model_input)
         self.observations.append(observation)
 
-    def store_state_action(self, state_action):
+    def store_history(self, window):
         '''
         Stores state action in previous memory
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim+time_dim,)
         '''
-        self.previous[:self.hist_length-1] = self.previous[1:]
-        self.previous[-1] = state_action
+        self.history[:self.hist_length-1] = self.history[1:]
+        self.history[-1] = window
+
+    def store_previous_state(self, state):
+        '''
+        Takes current state and stores in window for use in creating observation (concat of prev states)
+        :param state: array of shape (obs_dim)
+        '''
+        self.window[:self.window_size - 1] = self.window[1:]
+        self.window[-1] = state
 
     def clear_memory(self):
         '''

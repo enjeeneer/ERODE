@@ -10,8 +10,8 @@ from .base import Base
 
 class Agent(Base):
     def __init__(self, env, steps_per_day, env_name, models_dir, explorartion_mins=180, alpha=0.003, n_epochs=10,
-                 batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=3, latent_dim=200, f_ode_dim=100,
-                 z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20, solver='dopri5',
+                 batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=3, window_size=2, latent_dim=200,
+                 f_ode_dim=100, z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20, solver='dopri5',
                  rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1]):
 
         ### AGENT PROPERTIES ###
@@ -64,6 +64,7 @@ class Agent(Base):
         self.epochs = n_epochs
         self.batch_size = batch_size
         self.horizon = horizon
+        self.window_size = 2
         self.popsize = popsize
         self.expl_del = expl_del
         self.output_norm_range = output_norm_range
@@ -87,10 +88,10 @@ class Agent(Base):
                                        obs_dim=self.state_dim+self.time_dim, state_act_dim=self.state_act_dim)
 
         ### CONFIGURE MODELS ###
-        network_input_dims = ((1 + self.hist_length) * (self.state_dim + self.time_dim)) + self.act_dim
+        self.network_input_dims = ((1 + self.window_size) * (self.state_dim + self.time_dim)) + self.act_dim
         self.latent_ode_params = {
             # network hyperparams
-            'network_input_dims': network_input_dims,
+            'network_input_dims': self.network_input_dims,
             'models_dir': '../tmp/model_testing',
             'n_epochs': n_epochs,
 
@@ -157,7 +158,9 @@ class Agent(Base):
 
         particle_act_seqs = np.tile(act_seqs, (self.particles, 1, 1, 1)) # [part, popsize, horizon, act_dim]
         state_tile = np.tile(init_state, (self.particles, self.popsize, 1))  # [particles, popsize, state_dim]
-        hist = np.tile(self.memory.previous, (self.particles, self.popsize, 1, 1)) # [part, pop, hist_length, state_act_dim]
+        window = np.tile(self.memory.window, (self.particles, self.popsize, 1)) # [part, pop, window_size*state_dim]
+        hist = np.tile(self.memory.history, (self.particles, self.popsize, 1, 1)) # [part, pop, hist_length, state_act_dim]
+
 
         # initialise trajectory array
         trajs = np.zeros(shape=(self.particles, self.CEM.popsize, self.horizon, self.state_dim + self.time_dim))
@@ -168,9 +171,9 @@ class Agent(Base):
 
             # format current state-action
             action = particle_act_seqs[:, :, i, :]
-            state_actions = np.concatenate((action, state_tile), axis=2).reshape(
-                            self.particles, self.popsize, 1, self.state_act_dim) # [part, popsize, 1, state_act_dim]
-            input = np.concatenate((hist, state_actions), axis=2) # [part, popsize, hist_length + 1, state_act_dim]
+            state_action = np.concatenate((action, state_tile, window), axis=2).reshape(
+                            self.particles, self.popsize, 1, self.network_input_dims) # [part, popsize, 1, net_inp_dims]
+            input = np.concatenate((hist, state_action), axis=2) # [part, popsize, hist_length + 1, state_act_dim]
             assert input.shape == (self.particles, self.popsize, self.hist_length + 1, self.state_act_dim)
 
             # predict
@@ -182,10 +185,14 @@ class Agent(Base):
             pred_states = self.normaliser.update_time(state_tensor=pred_states, init_date=self.TS_init_data,
                                                       init_time=self.TS_init_time, TS_step=i)
 
-            # update memory
+            # update window with current state
+            window[:, :, self.state_dim:] = window[:, :, :(self.window_size-1)*self.state_dim]
+            window[:, :, :self.state_dim] = state_tile
+
+            # update history with current state-action
             hist[:, :, :-1, :] = hist[:, :, 1:, :] # shift memory back one timestep
-            hist[:, :, -1, :self.act_dim] = action # update action mem (act seqs starts at next state)
-            hist[:, :, -1, self.act_dim:self.state_act_dim] = pred_states.cpu().detach().numpy() # update state mem
+            hist[:, :, -1, :] = state_action # update action mem (act seqs starts at next state)
+
             state_tile = pred_states.cpu().detach().numpy()
 
         return trajs
@@ -197,15 +204,15 @@ class Agent(Base):
         :param observation: dict output of simulation describing current state of environment
         :param prev_action: array of action taken in environment at (t - 1), used to select new action near to it
         :param env: environment instance used to get current date and time
-        :return action_dict: dictionary describing agent's current best estimate of the optimal action given state
-        :return action_norm: array of action selected (shape: (act_dim,)), normalised in range [-1,1] for use
-                            in model training
+
         '''
         obs = self.normaliser.outputs(observation, env, for_memory=False)
 
         if self.n_steps <= self.exploration_steps:
             action_dict, action_norm = self.explore(prev_action)
-            model_input = np.concatenate((action_norm, obs, self.memory.previous), axis=0)  # create model input
+            window = np.concatenate((action_norm, obs, self.memory.window), axis=0).reshape(1,)  # create window
+            model_input = np.concatenate((window, self.memory.history), axis=0) # create model input [hist_lenght+1, net_inp_dims]
+            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
 
         else:
             # store date/time for TS
@@ -213,12 +220,15 @@ class Agent(Base):
             self.TS_init_time = (min, hour)
             self.TS_init_date = (day, month)
 
-            actions = self.optimizer.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
+            action = self.optimizer.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
+            window = np.concatenate((action, obs, self.memory.window), axis=0)  # create window
+            model_input = np.concatenate((window, self.memory.history), axis=0) # create model input [hist_lenght+1, net_inp_dims]
+            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
 
-            action_dict = self.normaliser.revert_actions(actions[0].cpu().detach().numpy())
-            model_input = np.concatenate((actions[0].cpu().detach().numpy(), obs, self.memory.previous))
+            action_dict = self.normaliser.revert_actions(action[0].cpu().detach().numpy())
 
-        self.memory.store_state_action(np.concatenate(actions, obs))
+        self.memory.store_previous_state(obs)
+        self.memory.store_history(window)
 
         return action_dict, model_input
 
@@ -260,7 +270,7 @@ class Agent(Base):
 
         #self.save_model()
 
-    def reward_estimator(self, init_history: np.array, act_seqs: T.tensor):
+    def reward_estimator(self, init_state: np.array, act_seqs: T.tensor):
         '''
         Takes popsize action sequences, runs each through a trajectory sampler to obtain P-many possible trajectories
         per sequence and then calculates expected reward of said sequence
@@ -269,7 +279,7 @@ class Agent(Base):
         :return rewards: Tensor of expected reward for each action sequence of shape (popsize,)
         '''
 
-        particle_trajs = self.plan(init_history, act_seqs)
+        particle_trajs = self.plan(init_state, act_seqs)
         particle_trajs_revert = self.normaliser.model_predictions_to_tensor(particle_trajs)
         rewards = self.planning_reward(particle_trajs_revert)
 

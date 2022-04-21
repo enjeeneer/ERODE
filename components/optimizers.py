@@ -4,11 +4,11 @@ from utils.torch_truncnorm import TruncatedNormal
 
 
 class CEM():
-    def __init__(self, act_dim, horizon, reward_function, max_iters=5,
+    def __init__(self, act_dim, horizon, reward_estimator, max_iters=5,
                  popsize=400, elites=0.1, epsilon=0.001, alpha=0.1):
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.act_dim, self.horizon, self.max_iters = act_dim, horizon, max_iters
-        self.reward_function = reward_function
+        self.reward_estimator = reward_estimator
         self.popsize, self.epsilon, self.alpha = popsize, epsilon, alpha
         self.num_elites = int(self.popsize * elites) # top 10%
         self.act_norm_low = T.tensor([-1], dtype=T.float, requires_grad=False).to(self.device)
@@ -30,7 +30,7 @@ class CEM():
             act_seqs = T.where(act_seqs < self.act_norm_low, self.act_norm_low, act_seqs)
             act_seqs = T.where(act_seqs > self.act_norm_high, self.act_norm_high, act_seqs)
 
-            exp_rewards = self.reward_function(state, act_seqs)
+            exp_rewards = self.reward_estimator(state, act_seqs)
             elites = act_seqs[np.argsort(exp_rewards)][:self.num_elites]
 
             new_mean = T.mean(elites, axis=0)

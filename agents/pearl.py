@@ -94,7 +94,7 @@ class Agent(Base):
         self.include_grid = include_grid
 
         ### CONFIGURE OPTIMIZER ###
-        self.optimizer = CEM(act_dim=self.act_dim, horizon=self.horizon, reward_function=self.reward_function,
+        self.optimizer = CEM(act_dim=self.act_dim, horizon=self.horizon, reward_estimator=self.reward_estimator,
                              popsize=self.popsize)
         self.cem_init_mean = T.zeros(size=(self.horizon, self.act_dim), dtype=T.float, requires_grad=False).to(
             self.device)
@@ -210,7 +210,7 @@ class Agent(Base):
 
         return action_dict, model_input
 
-    def reward_function(self, init_state: np.array, act_seqs: T.tensor):
+    def reward_estimator(self, init_state: np.array, act_seqs: T.tensor):
         '''
         Takes popsize action sequences, runs each through a trajectory sampler to obtain P-many possible trajectories
         per sequence and then calculates expected reward of said sequence

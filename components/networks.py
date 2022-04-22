@@ -5,7 +5,6 @@ import numpy as np
 from torchdiffeq import odeint_adjoint as odeint
 from torch.distributions.normal import Normal
 from torch.distributions import kl_divergence, Independent
-from utils.data_utils import DataManipulator
 
 
 class DeterministicNetwork(nn.Module):
@@ -304,7 +303,6 @@ class LatentODE(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(param['latent_dim'] + param['state_action_dim'], param['latent_dim'])
         )
-        self.data_helper = DataManipulator
         self.mse = nn.MSELoss()
         self.z0_prior = Normal(T.tensor([0.0], device=self.device), T.tensor([1.0], device=self.device))
         self.traj_length = param['traj_length']

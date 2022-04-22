@@ -100,6 +100,7 @@ class ModelFreeMemory:
         :return vals array: array of previous critic values of shape (batch_size,)
         :return rewards array: array of previous rewards of shape (batch_size,)
         '''
+
         n_states = len(self.model_inputs)
         batch_start = np.arange(0, n_states, self.batch_size)
         indices = np.arange(n_states, dtype=np.int64)
@@ -152,7 +153,7 @@ class ModelFreeMemory:
         self.previous[self.obs_dim:] = state
 
 class ErodeMemory:
-    def __init__(self, agent, batch_size, window_size, hist_length, obs_dim, state_act_dim):
+    def __init__(self, agent, batch_size, window_size, hist_length, obs_dim, net_inp_dims):
         self.model_inputs = []
         self.observations = []
         self.batch_size = batch_size
@@ -160,9 +161,9 @@ class ErodeMemory:
         self.hist_length = hist_length
         self.obs_dim = obs_dim # obs_dim + time_dim
         self.agent = agent
-        self.state_act_dim = state_act_dim
+        self.net_inp_dims = net_inp_dims
         self.window = np.zeros(shape=(self.obs_dim*self.window_size)) # number of prev states used to create obs
-        self.history = np.zeros(shape=(hist_length, self.state_act_dim))
+        self.history = np.zeros(shape=(hist_length, self.net_inp_dims))
 
     def generate_batches(self):
         '''
@@ -171,9 +172,14 @@ class ErodeMemory:
         :return: array of all stored observations of shape (datapoints, obs_dim)
         :return: array of batch indices of shape (datapoints/batch_size, batch_size)
         '''
-        datapoints = len(self.model_inputs)
-        batch_start = np.arange(0, datapoints, self.batch_size)
-        indices = np.random.choice(datapoints, size=datapoints, replace=True)
+        model_inputs = np.array(self.model_inputs)
+        rem = model_inputs.shape[0] % self.batch_size
+        if rem != 0:
+            model_inputs = model_inputs[:-rem]
+
+        samples = model_inputs.shape[0]
+        batch_start = np.arange(0, samples, self.batch_size)
+        indices = np.random.choice(samples, size=samples, replace=True)
         batches = [indices[i:i + self.batch_size] for i in batch_start]
 
         return np.array(self.model_inputs), np.array(self.observations), batches

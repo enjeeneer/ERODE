@@ -324,7 +324,7 @@ class LatentODE(nn.Module):
         else:
             assert history.shape[2] == self.hist_length + 1  # i.e. includes current state
             input_traj = history[:, :, :-1, :]
-            state_action = T.tensor(history[:, :, -1, :], dtype=T.float)  # # [z0_samples, batch_size, state_act_dim]
+            state_action = T.tensor(history[:, :, -1, :], dtype=T.float, device=self.device)  # # [z0_samples, batch_size, state_act_dim]
             z0s = self.get_z0(input_traj, plan=True)
 
         eval_points = T.arange(start=0, end=2, step=1, dtype=T.float32, device=self.device)

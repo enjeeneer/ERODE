@@ -1,6 +1,6 @@
 import energym
 import numpy as np
-from agents.ppo import Agent as PPO
+from agents.erode import Agent as ERODE
 import pickle
 from tqdm import tqdm
 import os
@@ -43,25 +43,28 @@ if __name__ == '__main__':
     for key, value in envs.items():
         # for mins in com_period:
 
-        years = 15
+        years = 1
         wandb_config = dict(
-            # exploration_mins=mins,
+            exploration_mins=540,
             env=key,
-            years=years,
-            episode_length='monthly',
-            n_epochs=25,
-            batch_size=64
+            alpha=0.003268,
+            particles=30,
+            latent_dim=200,
+            GRU_dim=100,
+            f_ode_dim=100,
+            hist_ode_dim=250,
+            n_epochs=10,
+            batch_size=32
         )
 
         ## WANDB SETUP ###
         wandb.init(
-            project='pearl',
+            project='erode',
             entity="enjeeneer",
             config=wandb_config,
-            tags=['ppo-oracle'],
-            allow_val_change=True
+            tags=['erode-testing'],
         )
-        wandb.config.update(wandb_config, allow_val_change=True)
+        wandb.config.update(wandb_config)
 
         print('### WANDB CONFIG ###')
         print(wandb.config)
@@ -93,13 +96,19 @@ if __name__ == '__main__':
             score_path = os.path.join(results_dir, score_name)
 
             env = energym.make(env_name, weather=weather, simulation_days=simulation_days)
-            agent = PPO(env=env,
-                         steps_per_day=steps_per_day,
-                         env_name=env_name,
-                        batch_size=wandb_config['batch_size'],
-                        n_epochs=wandb_config['n_epochs'],
-                         models_dir=models_dir,
-                         include_grid=True)
+            agent = ERODE(env=env,
+                          steps_per_day=steps_per_day,
+                          env_name=env_name,
+                          models_dir=models_dir,
+                          alpha=wandb_config['alpha'],
+                          particles=wandb_config['particles'],
+                          latent_dim=wandb_config['latent_dim'],
+                          GRU_dim=wandb_config['GRU_dim'],
+                          f_ode_dim=wandb_config['f_ode_dim'],
+                          hist_ode_dim=wandb_config['hist_ode_dim'],
+                          n_epochs=wandb_config['n_epochs'],
+                          batch_size=wandb_config['batch_size']
+                          )
 
             if year > 0:
                 agent.load_models()
@@ -126,14 +135,14 @@ if __name__ == '__main__':
                     observation = agent.add_c02(observation)
                 score = 0
                 for i in tqdm(range(sim_steps)):
-                    action_dict, model_input = agent.choose_action(observation, prev_action, env)
+                    action_dict, model_input = agent.act(observation, env, prev_action)
                     observation_ = env.step(action_dict)
                     if agent.include_grid:
                         observation_ = agent.add_c02(observation_)
                     reward = agent.calculate_reward(observation_)
                     score += reward
                     agent.n_steps += 1
-                    if agent.n_steps > agent.past_window_size:  # skip first two state-action pairs
+                    if agent.n_steps > agent.window_size:  # skip first two state-action pairs
                         agent.remember(observation_, model_input)
                     outputs.append(observation_)
                     actions.append(action_dict)
@@ -146,20 +155,20 @@ if __name__ == '__main__':
                     min, hour, day, month = env.get_date()
 
                     # exploration phase update
-                    if (agent.n_steps < steps_per_day) and (agent.n_steps % agent.batch_size == 0):
-                        model_loss = agent.learn()
-                        wandb.log({'model_loss': model_loss})
+                    if (agent.n_steps < steps_per_day) and (agent.n_steps
+                                                            % (agent.batch_size + agent.hist_length) == 0):
+                        agent.learn()
+                        # wandb.log({'model_loss': model_loss})
                         learn_iters += 1
-                        agent.save_models()
+                        # agent.save_models()
 
                     # save models at end of commissioning period
-                    if agent.n_steps == (wandb_config['exploration_mins'] / minutes_per_step):
-                        agent.save_models()
+                    # if agent.n_steps == (wandb_config['exploration_mins'] / minutes_per_step):
+                    #     agent.save_models()
 
                     # normal update
                     if agent.n_steps % agent.steps_per_day == 0:
-                        model_loss = agent.learn()
-                        wandb.log({'model_loss': model_loss})
+                        agent.learn()
                         learn_iters += 1
 
                         daily_scores.append(score)
@@ -177,10 +186,9 @@ if __name__ == '__main__':
                         score = 0
 
                     # log in wandb
-                    # wandb.log({'zone_temp': observation_['Z02_T']})
-                    # wandb.log({'C02': observation_['c02']})
+                    wandb.log({'zone_temp': observation_['Z02_T']})
                     wandb.log({'cum_emissions': sum(emissions)})
-                    # wandb.log({'temp_setpoint': action_dict['Z02_T_Thermostat_sp'][0]})
+
                     # if env_name == 'MixedUseFanFCU-v0':
                     #     wandb.log({'flowrate setpoint': action_dict['Bd_Fl_AHU1_sp'][0]})
 

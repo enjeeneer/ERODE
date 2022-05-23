@@ -8,9 +8,9 @@ import wandb
 import argparse
 
 envs = {
-    'MixedUseFanFCU-v0': 'GRC_A_Athens',
-    'OfficesThermostat-v0': 'GRC_A_Athens',
     'SeminarcenterThermostat-v0': 'DNK_MJ_Horsens1',
+    'OfficesThermostat-v0': 'GRC_A_Athens',
+    'MixedUseFanFCU-v0': 'GRC_A_Athens',
     # 'Apartments2Thermal-v0': 'ESP_CT_Barcelona',
 }
 
@@ -43,15 +43,24 @@ if __name__ == '__main__':
     for key, value in envs.items():
         # for mins in com_period:
 
+        # setup logging dirs
+        id = np.random.randint(low=0, high=1000)
+        results_path = os.path.join(os.getcwd(), 'experiments', key, 'erode', str(id))
+        models_path = os.path.join(os.getcwd(), 'tmp', key, 'erode', str(id))
+        os.mkdir(results_path, mode=0o666)
+        os.mkdir(models_path, mode=0o666)
+
         years = 1
         wandb_config = dict(
             exploration_mins=540,
             env=key,
+            id=id,
             alpha=0.003268,
             particles=30,
             latent_dim=200,
             GRU_dim=100,
             f_ode_dim=100,
+            hist_length=1,
             hist_ode_dim=250,
             n_epochs=10,
             batch_size=32
@@ -81,8 +90,7 @@ if __name__ == '__main__':
 
         # for exp in alpha:
         # setup experiment logging
-        results_dir = os.path.join(os.getcwd(), 'experiments', key, 'ppo', 'icml', 'oracle')
-        models_dir = os.path.join(os.getcwd(), 'tmp', key, 'ppo', 'oracle')
+
 
         for year in range(years):
             output_name = 'outputs.pickle'
@@ -90,17 +98,18 @@ if __name__ == '__main__':
             daily_score_name = 'daily_scores.pickle'
             score_name = 'scores.pickle'
 
-            output_path = os.path.join(results_dir, output_name)
-            action_path = os.path.join(results_dir, action_name)
-            daily_score_path = os.path.join(results_dir, daily_score_name)
-            score_path = os.path.join(results_dir, score_name)
+            output_path = os.path.join(results_path, output_name)
+            action_path = os.path.join(results_path, action_name)
+            daily_score_path = os.path.join(results_path, daily_score_name)
+            score_path = os.path.join(results_path, score_name)
 
             env = energym.make(env_name, weather=weather, simulation_days=simulation_days)
             agent = ERODE(env=env,
                           steps_per_day=steps_per_day,
                           env_name=env_name,
-                          models_dir=models_dir,
+                          models_dir=models_path,
                           alpha=wandb_config['alpha'],
+                          hist_length=wandb_config['hist_length'],
                           particles=wandb_config['particles'],
                           latent_dim=wandb_config['latent_dim'],
                           GRU_dim=wandb_config['GRU_dim'],
@@ -125,6 +134,7 @@ if __name__ == '__main__':
                 avg_scores = []
 
                 emissions = []
+                temps = []
 
                 prev_action = agent.normaliser.revert_actions(
                     np.random.uniform(low=-1, high=1,
@@ -142,7 +152,7 @@ if __name__ == '__main__':
                     reward = agent.calculate_reward(observation_)
                     score += reward
                     agent.n_steps += 1
-                    if agent.n_steps > agent.window_size:  # skip first two state-action pairs
+                    if agent.n_steps > (agent.window_size + agent.hist_length):
                         agent.remember(observation_, model_input)
                     outputs.append(observation_)
                     actions.append(action_dict)
@@ -151,6 +161,7 @@ if __name__ == '__main__':
                         observation_[agent.energy_reward_key] * (envs_timesteps[key]/60) / 1000
                         * (observation_[agent.c02_reward_key] / 1000)
                     )
+                    temps.append(observation_['Z02_T'])
 
                     min, hour, day, month = env.get_date()
 
@@ -169,6 +180,7 @@ if __name__ == '__main__':
                     # normal update
                     if agent.n_steps % agent.steps_per_day == 0:
                         agent.learn()
+                        agent.save_models()
                         learn_iters += 1
 
                         daily_scores.append(score)
@@ -182,12 +194,25 @@ if __name__ == '__main__':
                               'learning steps', learn_iters)
 
                         wandb.log({'mean_reward': avg_score})
+                        # log in wandb
+                        wandb.log({'av_zone_temp': np.mean(temps[-steps_per_day:])})
+                        wandb.log({'cum_emissions': sum(emissions)})
+
+                        with open(output_path, 'wb') as f:
+                            pickle.dump(outputs, f)
+
+                        with open(action_path, 'wb') as f:
+                            pickle.dump(actions, f)
+
+                        with open(daily_score_path, 'wb') as f:
+                            pickle.dump(daily_scores, f)
+
+                        with open(score_path, 'wb') as f:
+                            pickle.dump(step_scores, f)
 
                         score = 0
 
-                    # log in wandb
-                    wandb.log({'zone_temp': observation_['Z02_T']})
-                    wandb.log({'cum_emissions': sum(emissions)})
+                    
 
                     # if env_name == 'MixedUseFanFCU-v0':
                     #     wandb.log({'flowrate setpoint': action_dict['Bd_Fl_AHU1_sp'][0]})
@@ -195,17 +220,7 @@ if __name__ == '__main__':
                     observation = observation_
                     prev_action = action_dict
 
-                with open(output_path, 'wb') as f:
-                    pickle.dump(outputs, f)
-
-                with open(action_path, 'wb') as f:
-                    pickle.dump(actions, f)
-
-                with open(daily_score_path, 'wb') as f:
-                    pickle.dump(daily_scores, f)
-
-                with open(score_path, 'wb') as f:
-                    pickle.dump(step_scores, f)
+                
                 env.close()
 
             ### MAIN MODEL-FREE SCRIPT ###

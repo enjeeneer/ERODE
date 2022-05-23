@@ -12,7 +12,7 @@ class MixedUse:
             'Bd_Pw_cooling_AHU2',  # AHU 2 cooling power
             'Bd_Pw_cooling_HP',  # heat pump cooling power
             'Bd_Pw_heating_HP',  # heat pump heating power
-            'Fa_Pw_All',  # total power consumption
+            'Fa_Pw_HVAC',  # hvac power consumption
         ]
 
         self.redundant_actions = []  # no redundant actions for this environment
@@ -47,7 +47,7 @@ class MixedUse:
 
         # energy related features
         self.energy_reward = [
-            'Fa_Pw_HVAC',  # hvac power consumption
+            'Fa_Pw_All',  # total power consumption
         ]
 
         self.c02_reward = [
@@ -81,7 +81,7 @@ class Offices:
             'time',
             'Bd_Pw_All',  # building power consumption
             'Fa_Pw_PV',  # PV power production
-            'Fa_Pw_All',  # total power consumption
+            'Fa_Pw_HVAC',  # hvac power consumption
         ]
 
         self.redundant_actions = []  # no redundant actions for this environment
@@ -127,7 +127,7 @@ class Offices:
 
         # energy related features
         self.energy_reward = [
-            'Fa_Pw_HVAC',  # hvac power consumption
+            'Fa_Pw_All',  # total power consumption
         ]
 
         self.c02_reward = [
@@ -263,7 +263,7 @@ class SeminarcenterThermal:
             'Bd_CO2',
             'Bd_Pw_All',
             'Fa_Pw_Pur',
-            'Fa_Pw_All',  # building power consumption
+            'Fa_Pw_HVAC',
         ]
 
         self.redundant_actions = [
@@ -317,7 +317,7 @@ class SeminarcenterThermal:
 
         # energy related features
         self.energy_reward = [
-            'Fa_Pw_HVAC',
+            'Fa_Pw_All',  # building power consumption
         ]
 
         self.c02_reward = [

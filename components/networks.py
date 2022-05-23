@@ -133,6 +133,10 @@ class Q(nn.Module):
             nn.Linear(config['q_dim'], 1)
         )
 
+        self.optimizer = optim.Adam(self.parameters(), lr=config['q_lr'])
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
 ### LATENT ODE NETWORKS ###
 class ForwardODE(nn.Module):
     """

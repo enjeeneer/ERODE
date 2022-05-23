@@ -172,14 +172,10 @@ class ErodeMemory:
         :return: array of all stored observations of shape (datapoints, obs_dim)
         :return: array of batch indices of shape (datapoints/batch_size, batch_size)
         '''
-        model_inputs = np.array(self.model_inputs)
-        rem = model_inputs.shape[0] % self.batch_size
-        if rem != 0:
-            model_inputs = model_inputs[:-rem]
 
-        samples = model_inputs.shape[0]
-        batch_start = np.arange(0, samples, self.batch_size)
-        indices = np.random.choice(samples, size=samples, replace=True)
+        datapoints = len(self.model_inputs)
+        batch_start = np.arange(0, datapoints, self.batch_size)
+        indices = np.random.choice(datapoints, size=datapoints, replace=True)
         batches = [indices[i:i + self.batch_size] for i in batch_start]
 
         return np.array(self.model_inputs), np.array(self.observations), batches
@@ -215,5 +211,5 @@ class ErodeMemory:
         Clears working memory after each learning procedure.
         :return:
         '''
-        self.state_actions = []
+        self.model_inputs = []
         self.observations = []

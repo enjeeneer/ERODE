@@ -1,19 +1,20 @@
 import os
 import numpy as np
 import torch as T
-from components.networks import LatentODE
+from components.networks import LatentODE, DeterministicNetwork, Q
 from components.memory import ErodeMemory
 from components.optimizers import CEM
 from utils.utils import Normalize
+from utils.torch_truncnorm import TruncatedNormal
 import config.env_configs as env_configs
 from .base import Base
 
 
 class Agent(Base):
     def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins=540, alpha=0.003, n_epochs=10,
-                 batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=3, window_size=2, latent_dim=200,
+                 batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=1, window_size=2, latent_dim=200,
                  f_ode_dim=100, z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20,
-                 solver='dopri5',
+                 solver='dopri5',q_dim=200, pi_dim=200, discount=0.99,
                  rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1]):
 
         ### AGENT PROPERTIES ###
@@ -99,6 +100,15 @@ class Agent(Base):
                                   hist_length=self.hist_length, obs_dim=self.state_dim + self.time_dim,
                                   net_inp_dims=self.network_input_dims)
 
+        # create discount vector
+        disc_list = []
+        self.discount = discount
+        disc = discount
+        for i in range(self.horizon):
+            disc_list.append(disc)
+            disc *= self.discount
+        self.disc_vector = T.tensor(disc_list, dtype=T.float32)
+
         ### CONFIGURE MODELS ###
         self.latent_ode_params = {
             # network hyperparams
@@ -123,6 +133,11 @@ class Agent(Base):
             'particles': particles,
             'horizon': horizon,
 
+            # q and pi params
+            'pi_dim': pi_dim,
+            'q_dim': q_dim,
+            'q_lr': alpha,
+
             # ode solver params
             'solver': solver,
             'rtol': rtol,
@@ -140,6 +155,10 @@ class Agent(Base):
             'device': self.device,
             'steps_per_day': self.steps_per_day
         }
+
+        self.Q1, self.Q2 = Q(self.latent_ode_params), Q(self.latent_ode_params)
+        self.pi = DeterministicNetwork(output_dims=self.act_dim, input_dims=self.latent_dim,
+                                       chkpt_path=self.latent_ode_params['models_dir'])
         self.model = LatentODE(self.latent_ode_params)
         self.model.to(self.device)
         self.optimiser = T.optim.Adamax(self.model.parameters(), lr=alpha)
@@ -158,6 +177,36 @@ class Agent(Base):
                                     self.act_dim, self.energy_reward_key, self.temp_reward, self.lower_t, self.upper_t,
                                     self.n_steps, self.deltas, self.phi, self.include_grid, self.c02_reward_key,
                                     self.minutes_per_step, self.obs_space, self.cont_actions)
+
+    def predict_Q(self, z, a):
+        """
+        Predicts state-action value Q
+        :param z: latent state (latent_dim)
+        :param a: action (act_dim)
+        :return Q1, Q2: q-estimates from different networks
+        """
+        x = T.cat([z, a], dim=-1)
+
+        return self.Q1(x), self.Q2(x)
+
+    def sample_pi(self, z, std=0):
+        """
+        Samples action from learned policy pi
+        :param z: latent state (latent_dim)
+        :param std: standard deviation for applying noise to sample
+        """
+
+        mu = self.pi(z)
+        if std > 0:
+            std = T.ones_like(mu) * std
+            dist = TruncatedNormal(loc=mu, scale=std, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
+            act = dist.sample()
+            # ensure actions in range [-1,1]
+            act = T.where(act < self.act_norm_low, self.act_norm_low, act)
+            act = T.where(act > self.act_norm_high, self.act_norm_high, act)
+            return act
+
+        return mu
 
     def plan(self, init_state, act_seqs):
         """
@@ -302,6 +351,8 @@ class Agent(Base):
         :param particle_trajs: Tensor of sampled particle trajectories of shape: (particles, popsize, horizon, state_dim)
         :return exp_reward: Tensor of expected rewards for each action trajectory in popsize. Shape: (popsize,)
         '''
+
+
         energy_elements = particle_trajs[:, :, :, self.energy_idx]
         temp_elements = particle_trajs[:, :, :, self.temp_idx]
 
@@ -309,14 +360,18 @@ class Agent(Base):
                                    (self.upper_t - temp_elements) ** 2) * -self.theta
         temp_rewards = T.where((self.lower_t >= temp_elements) | (self.upper_t <= temp_elements), temp_penalties,
                                T.tensor([0.0], dtype=T.double))  # zero if in correct range, penalty otherwise
-        temp_sum = T.sum(temp_rewards, axis=[2, 3])  # sum across sensors and horizon
+
+        disc_temp_rewards = T.mul(temp_rewards, self.disc_vector)
+        assert disc_temp_rewards.shape(self.particles, self.popsize, self.horizon, self.state_dim)
+        temp_sum = T.sum(disc_temp_rewards, axis=[2, 3])  # sum across sensors and horizon
         temp_mean = T.mean(temp_sum, axis=0)  # expectation across particles
 
         if self.include_grid:
             c02_elements = particle_trajs[:, :, :, self.c02_idx]
             energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
             c02 = (c02_elements * energy_elements_kwh) * -self.phi
-            c02_sum = T.sum(c02, axis=2)
+            disc_c02 = T.mul(c02, self.disc_vector)
+            c02_sum = T.sum(disc_c02, axis=2)
             c02_mean = T.mean(c02_sum, axis=0)
             exp_reward = c02_mean + temp_mean
 
@@ -331,7 +386,7 @@ class Agent(Base):
         obs_norm = self.normaliser.outputs(observation, env=self.env, for_memory=True)
         self.memory.store_memory(model_input=model_input, observation=obs_norm)
 
-    def save_model(self):
+    def save_models(self):
         '''
         Saves parameters of each model in ensemble to directory
         '''

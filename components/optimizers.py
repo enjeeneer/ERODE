@@ -18,6 +18,7 @@ class CEM():
             raise ValueError("Number of elites must not be greater than the population size.")
 
     def optimal_action(self, state, init_mean, init_var):
+        print('...planning...')
         mean, var, t = init_mean, init_var, 0
 
         # cem optimisation loop

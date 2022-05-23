@@ -115,9 +115,25 @@ class ProbabilisticNetwork(nn.Module):
         else:
             self.model.load_state_dict(T.load(path))
 
+class Q(nn.Module):
+    """
+    A Q-function with layer normalisation
+    """
+    def __init__(self, config):
+        super(Q).__init__()
+
+        self.model =  nn.Sequential(
+            nn.Linear(config['latent_dim']+config['act_dim'], config['q_dim']),
+            nn.LayerNorm(config['q_dim']),
+            nn.Tanh(),
+            nn.Linear(config['q_dim'],config['q_dim']),
+            nn.Tanh(),
+            nn.Linear(config['q_dim'], config['q_dim']),
+            nn.ELU(),
+            nn.Linear(config['q_dim'], 1)
+        )
 
 ### LATENT ODE NETWORKS ###
-
 class ForwardODE(nn.Module):
     """
     Network that represents forward dynamics of environment.
@@ -239,8 +255,8 @@ class OdeRNN(nn.Module):
         # these next 7 lines skip explicit encoding by going straight to ode_func which has latent_dims input
         if train:
             # initial guess at latent state is zeros for t_0
-            mean0 = T.zeros(self.param['batch_size'], self.param['latent_dim'], device=self.param['device'])
-            std0 = T.zeros(self.param['batch_size'], self.param['latent_dim'], device=self.param['device'])
+            mean0 = T.zeros(history.shape[0], self.param['latent_dim'], device=self.param['device'])
+            std0 = T.zeros(history.shape[0], self.param['latent_dim'], device=self.param['device'])
 
         else:
             mean0 = T.zeros(self.param['particles'], history.shape[1], self.param['latent_dim'],

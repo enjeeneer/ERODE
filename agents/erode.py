@@ -15,7 +15,7 @@ class Agent(Base):
     def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins=540, alpha=0.003, n_epochs=10,
                  batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=1, window_size=2, latent_dim=200,
                  f_ode_dim=100, z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20,
-                 solver='dopri5',q_dim=200, pi_dim=200, discount=0.99,
+                 solver='dopri5',q_dim=200, pi_dim=200, discount=0.99, mix_coeff=0.05,
                  rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1]):
 
         ### AGENT PROPERTIES ###
@@ -174,6 +174,7 @@ class Agent(Base):
             self.device)
         self.cem_init_var = T.tile(T.tensor((1 - (-1)) ** 2 / 16, requires_grad=False),
                                    (self.horizon, self.act_dim)).to(self.device)
+        self.mix_coeff = mix_coeff
 
         super(Agent, self).__init__(self.env, self.normaliser, self.memory, self.config, self.beta, self.theta,
                                     self.act_dim, self.energy_reward_key, self.temp_reward, self.lower_t, self.upper_t,
@@ -185,7 +186,7 @@ class Agent(Base):
 
         return self.Q1(x), self.Q2(x)
 
-    def sample_pi(self, z, std=0):
+    def sample_pi(self, z, std=0.05):
         """
         Samples action from learned policy pi
         :param z: latent state (latent_dim)
@@ -204,32 +205,45 @@ class Agent(Base):
 
         return mu
 
-    def plan(self, init_state, act_seqs):
+    def traj_sampler(self, init_state, cem_act_seqs):
         """
         Performs trajectory sampling using latent odes
         :param init_state: array of more recent observation (state_dim,)
         :param act_seqs: numpy array of action sequences of shape (popsize, horizon, act_dim)
         :return trajs: array of trajectories of shape: (particles, N, horizon, state_dim)
         """
-        act_seqs = act_seqs.clone().cpu().detach().numpy()
-        particle_act_seqs = np.tile(act_seqs, (self.particles, 1, 1, 1))  # [part, popsize, horizon, act_dim]
+        cem_act_seqs = cem_act_seqs.clone().cpu().detach().numpy()
+        cem_act_seqs = np.tile(cem_act_seqs, (self.particles, 1, 1, 1))  # [part, cem_actions, horizon, act_dim]
         state_tile = np.tile(init_state, (self.particles, self.popsize, 1))  # [particles, popsize, state_dim]
         window = np.tile(self.memory.window, (self.particles, self.popsize, 1))  # [part, pop, window_size*state_dim]
         hist = np.tile(self.memory.history,
                        (self.particles, self.popsize, 1, 1))  # [part, pop, hist_length, state_act_dim]
 
-        # initialise trajectory array
+        # initialise trajectory and pi_action arrays
         trajs = np.zeros(shape=(self.particles, self.CEM.popsize, self.horizon, self.state_dim + self.time_dim))
+        pi_act_seqs = np.zeros(shape=(self.particles, self.popsize * self.mix_coeff, self.horizon, self.act_dim))
 
         for i in range(self.horizon):
             # store traj
             trajs[:, :, i, :] = state_tile
 
             # format current state-action
-            action = particle_act_seqs[:, :, i, :]
-            state_action = np.concatenate((action, state_tile, window), axis=2)
+            cem_actions = cem_act_seqs[:, :, i, :] # [particles, cem_actions, act_dim]
+
+            # sample some actions from policy
+            z = self.model.get_z0(hist[1, int(self.popsize * self.mix_coeff), :, :]) # [pi_actions, latent_dim]
+            z_tile = np.tile(z, self.particles, 1, 1) # [particles, pi_actions, latent_dim]
+            pi_actions = self.pi.sample_pi(z_tile) # [particles, pi_actions, act_dim]
+
+            # update pi_act memory to give back to CEM
+            pi_act_seqs[:, :, i, :] = pi_actions
+
+            # concat cem and policy actions
+            actions = np.concatenate((cem_actions, pi_actions), axis=1) # [particles, popsize, act_dim]
+
+            state_action = np.concatenate((actions, state_tile, window), axis=2)
             state_action = np.expand_dims(state_action, axis=2) # [part, popsize, 1, net_inp_dims]
-            input = np.concatenate((hist, state_action), axis=2)  # [part, popsize, hist_length + 1, state_act_dim]
+            input = np.concatenate((hist, state_action), axis=2)  # [part, popsize, hist_length + 1, net_inp_dims]
             assert input.shape == (self.particles, self.popsize, self.hist_length + 1, self.network_input_dims)
 
             # predict
@@ -251,7 +265,10 @@ class Agent(Base):
 
             state_tile = pred_states.cpu().detach().numpy()
 
-        return trajs
+        combined_acts = np.concatenate((cem_act_seqs, pi_act_seqs), axis=1) # [particles, popsize, horizon, act_dim]
+        assert combined_acts.shape == (self.particles, self.popsize, self.horizon, self.act_dim)
+
+        return trajs, combined_acts
 
     def act(self, observation, env, prev_action):
         """
@@ -325,7 +342,7 @@ class Agent(Base):
 
         self.memory.clear_memory()
 
-    def reward_estimator(self, init_state: np.array, act_seqs: T.tensor):
+    def estimate_value(self, init_state: np.array, act_seqs: T.tensor):
         '''
         Takes popsize action sequences, runs each through a trajectory sampler to obtain P-many possible trajectories
         per sequence and then calculates expected reward of said sequence
@@ -335,6 +352,7 @@ class Agent(Base):
         '''
 
         particle_trajs = self.plan(init_state, act_seqs)
+
         particle_trajs_revert = self.normaliser.model_predictions_to_tensor(particle_trajs)
         rewards = self.planning_reward(particle_trajs_revert)
 
@@ -400,4 +418,51 @@ class Agent(Base):
         for m in [self.Q1, self.Q2]:
             for param in m.parameters():
                 param.requires_grad(enable)
+
+    def plan_2(self, observation, env, prev_action):
+        # normalise observation
+        obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
+
+        # exploration policy
+        if self.n_steps <= self.exploration_steps:
+            action_dict, action_norm = self.explore(prev_action)
+            window = np.concatenate((action_norm, obs, self.memory.window), axis=0)  # create window
+            window = np.expand_dims(window, axis=0)  # [1, net_inp_dims]
+            model_input = np.concatenate((self.memory.history, window),
+                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
+            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
+
+        else:
+            # store date/time for TS
+            min, hour, day, month = env.get_date()
+            self.TS_init_time = (min, hour)
+            self.TS_init_date = (day, month)
+
+
+
+
+            actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
+
+
+
+
+
+
+
+
+            action = actions[0].cpu().detach().numpy()  # take only first action
+            window = np.concatenate((action, obs, self.memory.window), axis=0)  # create window
+            window = np.expand_dims(window, axis=0)
+            model_input = np.concatenate((window, self.memory.history),
+                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
+            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
+
+            action_dict = self.normaliser.revert_actions(action)
+
+        self.memory.store_window(obs)
+        self.memory.store_history(window)
+
+        return action_dict, model_input
+
+
 

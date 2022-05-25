@@ -137,10 +137,7 @@ class Q(nn.Module):
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
-    def predict(self, z, a):
-        x = T.cat([z, a], dim=-1)
 
-        return self.model(x)
 
 ### LATENT ODE NETWORKS ###
 class ForwardODE(nn.Module):
@@ -401,6 +398,8 @@ class LatentODE(nn.Module):
             z0 = self.z0_prior.sample(sample_shape=(self.param['batch_size'], self.param['latent_dim']))
 
             return z0
+
+    def encoder(self, state):
 
     def loss(self, pred_states_mean, real_states, z0_dists, kl_coef):
         '''

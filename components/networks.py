@@ -137,6 +137,11 @@ class Q(nn.Module):
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
+    def predict(self, z, a):
+        x = T.cat([z, a], dim=-1)
+
+        return self.model(x)
+
 ### LATENT ODE NETWORKS ###
 class ForwardODE(nn.Module):
     """

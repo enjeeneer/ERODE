@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import torch.nn as nn
 import torch as T
 from components.networks import LatentODE, DeterministicNetwork, Q
 from components.memory import ErodeMemory
@@ -157,6 +158,7 @@ class Agent(Base):
         }
 
         self.Q1, self.Q2 = Q(self.latent_ode_params), Q(self.latent_ode_params)
+        self.Q1_target, self.Q2_target = Q(self.latent_ode_params), Q(self.latent_ode_params)
         self.pi = DeterministicNetwork(output_dims=self.act_dim, input_dims=self.latent_dim,
                                        chkpt_path=self.latent_ode_params['models_dir'])
         self.model = LatentODE(self.latent_ode_params)
@@ -178,16 +180,6 @@ class Agent(Base):
                                     self.n_steps, self.deltas, self.phi, self.include_grid, self.c02_reward_key,
                                     self.minutes_per_step, self.obs_space, self.cont_actions)
 
-    def predict_Q(self, z, a):
-        """
-        Predicts state-action value Q
-        :param z: latent state (latent_dim)
-        :param a: action (act_dim)
-        :return Q1, Q2: q-estimates from different networks
-        """
-        x = T.cat([z, a], dim=-1)
-
-        return self.Q1(x), self.Q2(x)
 
     def sample_pi(self, z, std=0):
         """
@@ -258,14 +250,13 @@ class Agent(Base):
         return trajs
 
     def act(self, observation, env, prev_action):
-        '''
+        """
         Selects action given current state either by random exploration (when n_step < exploration steps) or by
         sampling actions from CEM optimiser in trajectory sampler.
         :param observation: dict output of simulation describing current state of environment
         :param prev_action: array of action taken in environment at (t - 1), used to select new action near to it
         :param env: environment instance used to get current date and time
-
-        '''
+        """
         obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
 
         if self.n_steps <= self.exploration_steps:

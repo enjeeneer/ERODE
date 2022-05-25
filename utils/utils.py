@@ -18,6 +18,8 @@ class Normalize:
         self.act_space = [key for key in env.get_inputs_names() if key not in self.red_act]
         self.obs_space = [key for key in env.get_outputs_names() if key not in self.red_obs]
         self.steps_per_day = steps_per_day
+        self.reward_low = self.config.reward_low
+        self.reward_high = self.config.reward_high
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
         ### OUTPUT SPACE BOUNDS ###
@@ -225,3 +227,16 @@ class Normalize:
                                  [state_tensor.shape[0], 1]).to(self.device)
 
         return T.cat((state_tensor, time_tensor), dim=-1)
+
+    def rewards(self, reward):
+        '''
+        Scales rewards in region [-1, 0]
+        '''
+
+        norm = ((reward - self.reward_low) / (0 - self.reward_low)) * (0 - (-1)) + (-1)
+
+        return norm
+
+
+
+

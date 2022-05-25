@@ -1,5 +1,7 @@
 import numpy as np
 from copy import deepcopy
+
+import torch
 from energym.spaces.box import Box
 import datetime
 import torch as T
@@ -20,6 +22,8 @@ class Normalize:
         self.steps_per_day = steps_per_day
         self.reward_low = self.config.reward_low
         self.reward_high = self.config.reward_high
+        self.reward_low_T = T.tensor(self.reward_low, dtype=T.float)
+        self.reward_high_T = T.tensor(self.reward_high, dtype=T.float)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
         ### OUTPUT SPACE BOUNDS ###
@@ -232,10 +236,15 @@ class Normalize:
         '''
         Scales rewards in region [-1, 0]
         '''
-
-        norm = ((reward - self.reward_low) / (0 - self.reward_low)) * (0 - (-1)) + (-1)
+        if T.is_tensor(reward):
+            norm = ((reward - self.reward_low_T) / (self.reward_high_T - self.reward_low_T)) * (0 - (-1)) + (-1)
+        else:
+            norm = ((reward - self.reward_low) / (self.reward_high - self.reward_low)) * (0 - (-1)) + (-1)
 
         return norm
+
+
+
 
 
 

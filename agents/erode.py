@@ -180,6 +180,10 @@ class Agent(Base):
                                     self.n_steps, self.deltas, self.phi, self.include_grid, self.c02_reward_key,
                                     self.minutes_per_step, self.obs_space, self.cont_actions)
 
+    def Q(self, z, a):
+        x = T.cat([z, a], dim=-1)
+
+        return self.Q1(x), self.Q2(x)
 
     def sample_pi(self, z, std=0):
         """
@@ -390,3 +394,10 @@ class Agent(Base):
         '''
         print('... loading models ...')
         self.model.load_state_dict(T.load(self.model_path))
+
+    def track_q_grad(self, enable=True):
+        """Utility function that enables/disables gradient tracking of Q-networks"""
+        for m in [self.Q1, self.Q2]:
+            for param in m.parameters():
+                param.requires_grad(enable)
+

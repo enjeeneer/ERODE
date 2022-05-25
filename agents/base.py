@@ -52,6 +52,9 @@ class Base:
             energy_reward = -(self.beta * state_dict[self.energy_reward_key])
             reward = energy_reward + temp_reward
 
+        # normalise
+        reward = self.normaliser.rewards(reward)
+
         return reward
 
     def explore(self, prev_action):

@@ -54,6 +54,9 @@ class MixedUse:
             'c02'
         ]
 
+        self.reward_high = 0
+        self.reward_low = -15000
+
         self.disturbances = [
             'Ext_Irr',  # irradiance
             'Ext_P',  # pressure
@@ -133,6 +136,9 @@ class Offices:
         self.c02_reward = [
             'c02'
         ]
+
+        self.reward_high = 0
+        self.reward_low = -10000
 
         self.disturbances = [
             'Ext_Irr',  # irradiance
@@ -323,6 +329,9 @@ class SeminarcenterThermal:
         self.c02_reward = [
             'Grid_CO2'
         ]
+
+        self.reward_high = 0
+        self.reward_low = -600000
 
         self.disturbances = [
             'Ext_Irr',  # irradiance

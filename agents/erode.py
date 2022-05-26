@@ -231,7 +231,8 @@ class Agent(Base):
             cem_actions = cem_act_seqs[:, :, i, :] # [particles, cem_actions, act_dim]
 
             # sample some actions from policy
-            z = self.model.get_z0(hist[1, int(self.popsize * self.mix_coeff), :, :]) # [pi_actions, latent_dim]
+            ### THIS ISNT RIGHT AND NEEDS TO BE FIXED; I CANT SAMPLE ONE PARTICLE ONLY ###
+            z = self.model.get_z0(hist[1, -int(self.popsize * self.mix_coeff):, :, :]) # [pi_actions, latent_dim]
             z_tile = np.tile(z, self.particles, 1, 1) # [particles, pi_actions, latent_dim]
             pi_actions = self.pi.sample_pi(z_tile) # [particles, pi_actions, act_dim]
 
@@ -267,6 +268,9 @@ class Agent(Base):
 
         combined_acts = np.concatenate((cem_act_seqs, pi_act_seqs), axis=1) # [particles, popsize, horizon, act_dim]
         assert combined_acts.shape == (self.particles, self.popsize, self.horizon, self.act_dim)
+
+        # get zs for terminal value function
+
 
         return trajs, combined_acts
 
@@ -342,7 +346,7 @@ class Agent(Base):
 
         self.memory.clear_memory()
 
-    def estimate_value(self, init_state: np.array, act_seqs: T.tensor):
+    def estimate_value(self, init_state: np.array, cem_act_seqs: T.tensor):
         '''
         Takes popsize action sequences, runs each through a trajectory sampler to obtain P-many possible trajectories
         per sequence and then calculates expected reward of said sequence
@@ -351,12 +355,14 @@ class Agent(Base):
         :return rewards: Tensor of expected reward for each action sequence of shape (popsize,)
         '''
 
-        particle_trajs = self.plan(init_state, act_seqs)
-
+        particle_trajs, combined_actions = self.traj_sampler(init_state, cem_act_seqs)
         particle_trajs_revert = self.normaliser.model_predictions_to_tensor(particle_trajs)
-        rewards = self.planning_reward(particle_trajs_revert)
+        rewards = self.planning_reward(particle_trajs_revert) # [popsize,]
 
-        return rewards
+        # value
+
+
+        return rewards, combined_actions
 
     def planning_reward(self, particle_trajs: T.tensor):
         '''
@@ -374,8 +380,8 @@ class Agent(Base):
         temp_rewards = T.where((self.lower_t >= temp_elements) | (self.upper_t <= temp_elements), temp_penalties,
                                T.tensor([0.0], dtype=T.double))  # zero if in correct range, penalty otherwise
 
+        # apply discounting to horizon
         disc_temp_rewards = T.mul(temp_rewards, self.disc_vector)
-        assert disc_temp_rewards.shape(self.particles, self.popsize, self.horizon, self.state_dim)
         temp_sum = T.sum(disc_temp_rewards, axis=[2, 3])  # sum across sensors and horizon
         temp_mean = T.mean(temp_sum, axis=0)  # expectation across particles
 
@@ -383,7 +389,10 @@ class Agent(Base):
             c02_elements = particle_trajs[:, :, :, self.c02_idx]
             energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
             c02 = (c02_elements * energy_elements_kwh) * -self.phi
+
+            # discount
             disc_c02 = T.mul(c02, self.disc_vector)
+
             c02_sum = T.sum(disc_c02, axis=2)
             c02_mean = T.mean(c02_sum, axis=0)
             exp_reward = c02_mean + temp_mean
@@ -392,6 +401,12 @@ class Agent(Base):
             energy_sum = T.sum(energy_elements, axis=2) * -self.beta  # get cumulative energy use across each act seq
             energy_mean = T.mean(energy_sum, axis=0)  # take expectation across particles
             exp_reward = energy_mean + temp_mean
+
+        # normalise rewards
+        exp_reward = self.normaliser.rewards(exp_reward)
+
+        ### NEED TO ADD IN TERMINAL VALUE FUNCTION CALCULATION
+
 
         return exp_reward
 

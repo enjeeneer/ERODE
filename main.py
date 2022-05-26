@@ -15,7 +15,7 @@ envs = {
 }
 
 envs_timesteps = {
-    'OfficesThermostat-v0':  15,
+    'OfficesThermostat-v0': 15,
     'SeminarcenterThermostat-v0': 10,
     # 'Apartments2Thermal-v0': 3,
     'MixedUseFanFCU-v0': 15,
@@ -91,7 +91,6 @@ if __name__ == '__main__':
         # for exp in alpha:
         # setup experiment logging
 
-
         for year in range(years):
             output_name = 'outputs.pickle'
             action_name = 'actions.pickle'
@@ -122,7 +121,6 @@ if __name__ == '__main__':
             if year > 0:
                 agent.load_models()
 
-
             ### MAIN MODEL-BASED SCRIPT ###
             if agent.model_based:
                 print('### RUNNING MODEL-BASED SCRIPT ###')
@@ -145,23 +143,27 @@ if __name__ == '__main__':
                     observation = agent.add_c02(observation)
                 score = 0
                 for i in tqdm(range(sim_steps)):
-                    action_dict, model_input = agent.act(observation, env, prev_action)
-                    observation_ = env.step(action_dict)
+                    action_dict, model_input, obs = agent.plan(observation, env, prev_action)
+                    obs_next = env.step(action_dict)
                     if agent.include_grid:
-                        observation_ = agent.add_c02(observation_)
-                    reward = agent.calculate_reward(observation_)
+                        observation_ = agent.add_c02(obs_next)
+                    reward = agent.calculate_reward(obs_next)
                     score += reward
                     agent.n_steps += 1
-                    if agent.n_steps > (agent.window_size + agent.hist_length):
-                        agent.remember(observation_, model_input)
-                    outputs.append(observation_)
+                    if agent.n_steps > agent.hist_length:
+                        agent.memory.store(model_input=model_input,
+                                           obs=obs,
+                                           obs_next=obs_next,
+                                           reward=reward
+                                           )
+                    outputs.append(obs_next)
                     actions.append(action_dict)
                     step_scores.append(reward)
                     emissions.append(
-                        observation_[agent.energy_reward_key] * (envs_timesteps[key]/60) / 1000
-                        * (observation_[agent.c02_reward_key] / 1000)
+                        obs_next[agent.energy_reward_key] * (envs_timesteps[key] / 60) / 1000
+                        * (obs_next[agent.c02_reward_key] / 1000)
                     )
-                    temps.append(observation_['Z02_T'])
+                    temps.append(obs_next['Z02_T'])
 
                     min, hour, day, month = env.get_date()
 
@@ -188,7 +190,6 @@ if __name__ == '__main__':
                         avg_scores.append(avg_score)
                         _, _, day, month = env.get_date()
 
-
                         print('date:', day, '/', month, '--',
                               'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
                               'learning steps', learn_iters)
@@ -212,15 +213,12 @@ if __name__ == '__main__':
 
                         score = 0
 
-                    
-
                     # if env_name == 'MixedUseFanFCU-v0':
                     #     wandb.log({'flowrate setpoint': action_dict['Bd_Fl_AHU1_sp'][0]})
 
                     observation = observation_
                     prev_action = action_dict
 
-                
                 env.close()
 
             ### MAIN MODEL-FREE SCRIPT ###

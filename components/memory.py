@@ -153,17 +153,18 @@ class ModelFreeMemory:
         self.previous[self.obs_dim:] = state
 
 class ErodeMemory:
-    def __init__(self, agent, batch_size, hist_length, obs_dim, net_inp_dims):
+    def __init__(self, batch_size, hist_length, obs_dim, net_inp_dims):
         self.model_inputs = []
-        self.observations = []
+        self.obs = []
+        self.obs_next = []
+        self.rewards = []
         self.batch_size = batch_size
         self.hist_length = hist_length
         self.obs_dim = obs_dim # obs_dim + time_dim
-        self.agent = agent
         self.net_inp_dims = net_inp_dims
         self.history = np.zeros(shape=(hist_length, self.net_inp_dims))
 
-    def generate_batches(self):
+    def sample(self):
         '''
         Generates batches of training data for dynamical model from previously executed state actions and observations
         :return: array of all stored state actions of shape (datapoints, act_dim+obs_dim)
@@ -178,22 +179,24 @@ class ErodeMemory:
 
         return np.array(self.model_inputs), np.array(self.observations), batches
 
-    def store_memory(self, model_input, observation):
+    def store(self, model_input, obs, obs_next, reward):
         '''
         Stores model_input and correlating observation in memory
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim,)
         :param observation: normalised array of observations of shape (observation,)
         '''
         self.model_inputs.append(model_input)
-        self.observations.append(observation)
+        self.obs.append(obs)
+        self.obs_next.append(obs_next)
+        self.rewards.append(reward)
 
-    def store_history(self, window):
+    def store_history(self, state_action):
         '''
         Stores state action in previous memory
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim+time_dim,)
         '''
         self.history[:self.hist_length-1] = self.history[1:]
-        self.history[-1] = window
+        self.history[-1] = state_action
 
     def clear_memory(self):
         '''
@@ -201,4 +204,6 @@ class ErodeMemory:
         :return:
         '''
         self.model_inputs = []
-        self.observations = []
+        self.obs = []
+        self.obs_next = []
+        self.rewards = []

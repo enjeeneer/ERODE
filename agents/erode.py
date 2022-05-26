@@ -182,30 +182,6 @@ class Agent(Base):
                                     self.n_steps, self.deltas, self.phi, self.include_grid, self.c02_reward_key,
                                     self.minutes_per_step, self.obs_space, self.cont_actions)
 
-    def Q(self, z, a):
-        x = T.cat([z, a], dim=-1)
-
-        return self.Q1(x), self.Q2(x)
-
-    def sample_pi(self, z, std=0.05):
-        """
-        Samples action from learned policy pi
-        :param z: latent state (latent_dim)
-        :param std: standard deviation for applying noise to sample
-        """
-
-        mu = self.pi(z)
-        if std > 0:
-            std = T.ones_like(mu) * std
-            dist = TruncatedNormal(loc=mu, scale=std, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
-            act = dist.sample()
-            # ensure actions in range [-1,1]
-            act = T.where(act < self.act_norm_low, self.act_norm_low, act)
-            act = T.where(act > self.act_norm_high, self.act_norm_high, act)
-            return act
-
-        return mu
-
     @torch.no_grad()
     def traj_sampler(self, init_state, stoch_acts):
         """
@@ -269,44 +245,6 @@ class Agent(Base):
 
         return trajs, combined_acts
 
-    def act(self, observation, env, prev_action):
-        """
-        Selects action given current state either by random exploration (when n_step < exploration steps) or by
-        sampling actions from CEM optimiser in trajectory sampler.
-        :param observation: dict output of simulation describing current state of environment
-        :param prev_action: array of action taken in environment at (t - 1), used to select new action near to it
-        :param env: environment instance used to get current date and time
-        """
-        obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
-
-        if self.n_steps <= self.exploration_steps:
-            action_dict, action_norm = self.explore(prev_action)
-            state_action = np.concatenate((action_norm, obs), axis=0)  # create state/action
-            state_action = np.expand_dims(state_action, axis=0) # [1, net_inp_dims]
-            model_input = np.concatenate((self.memory.history, state_action),
-                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
-            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
-
-        else:
-            # store date/time for TS
-            min, hour, day, month = env.get_date()
-            self.TS_init_time = (min, hour)
-            self.TS_init_date = (day, month)
-
-            actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
-            action = actions[0].cpu().detach().numpy() # take only first action
-            state_action = np.concatenate((action, obs), axis=0)  # create state/action
-            state_action = np.expand_dims(state_action, axis=0)
-            model_input = np.concatenate((state_action, self.memory.history),
-                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
-            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
-
-            action_dict = self.normaliser.revert_actions(action)
-
-        self.memory.store_history(state_action)
-
-        return action_dict, model_input
-
     @torch.no_grad()
     def plan(self, observation, env, prev_action):
         """
@@ -345,36 +283,30 @@ class Agent(Base):
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
 
                 exp_rewards = self.estimate_value(trajs)  # returns pi_actions appended to CEM actions
-                elites = combined_actions[np.argsort(exp_rewards)][:self.num_elites]
+                elites = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
 
                 new_mean = T.mean(elites, axis=0)
                 new_var = T.var(elites, axis=0)
 
-                mean = self.alpha * mean + (1 - self.alpha) * new_mean
-                var = self.alpha * var + (1 - self.alpha) * new_var
+                mean = self.cfg.kappa * mean + (1 - self.cfg.kappa) * new_mean
+                var = self.cfg.kappa * var + (1 - self.cfg.kappa) * new_var
 
                 t += 1
 
-            optimal_action_sequence = mean  # select first action from optimal action sequence
+            opt_actions = mean
+            action = opt_actions[0].cpu().detach().numpy()  # take only first action
 
-            return optimal_action_sequence
-
-
-
-
-            actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
-            action = actions[0].cpu().detach().numpy() # take only first action
+            # variables for memory
             state_action = np.concatenate((action, obs), axis=0)  # create state/action
             state_action = np.expand_dims(state_action, axis=0)
-            model_input = np.concatenate((state_action, self.memory.history),
-                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
+            model_input = np.concatenate((self.memory.history, state_action), axis=0)  # create model input [hist_lenght+1, net_inp_dims]
             assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
 
             action_dict = self.normaliser.revert_actions(action)
 
         self.memory.store_history(state_action)
 
-        return action_dict, model_input
+        return action_dict, model_input, obs
 
     def learn(self):
         '''
@@ -385,7 +317,7 @@ class Agent(Base):
 
         print('...updating model parameters...')
         # generate batches
-        model_inp_array, obs_array, batches = self.memory.generate_batches()
+        model_inp_array, obs_array, batches = self.memory.sample()
         n_batches = len(batches)
 
         for epoch in range(self.epochs):
@@ -408,6 +340,52 @@ class Agent(Base):
                 avg_loss += loss / n_batches
 
         self.memory.clear_memory()
+
+    def Q(self, z, a):
+        x = T.cat([z, a], dim=-1)
+
+        return self.Q1(x), self.Q2(x)
+
+    def sample_pi(self, z, std=0.05):
+        """
+        Samples action from learned policy pi
+        :param z: latent state (latent_dim)
+        :param std: standard deviation for applying noise to sample
+        """
+
+        mu = self.pi(z)
+        if std > 0:
+            std = T.ones_like(mu) * std
+            dist = TruncatedNormal(loc=mu, scale=std, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
+            act = dist.sample()
+            # ensure actions in range [-1,1]
+            act = T.where(act < self.act_norm_low, self.act_norm_low, act)
+            act = T.where(act > self.act_norm_high, self.act_norm_high, act)
+            return act
+
+        return mu
+
+    def update_pi(self, zs):
+        """
+        Updates policy given a trajectory of latent states to horizon H (we likely want to batch this)
+        :param zs: vector of latent states
+        """
+        self.pi.optimizer.zero_grad(set_to_none=True)
+        self.track_q_grad(False)
+
+        # loss is a weighted sum of q values
+        pi_loss = 0
+        for t, z in enumerate(zs):
+            action = self.sample_pi(z)
+            q = torch.min(*self.Q(z, action))
+            pi_loss += -q.mean() * (self.cfg.rho ** t)
+
+        pi_loss.backward()
+        self.pi.optimizer.step()
+        self.track_q_grad(True)
+
+        return pi_loss.item()
+
 
     @torch.no_grad()
     def estimate_value(self, trajs, actions):
@@ -469,10 +447,6 @@ class Agent(Base):
 
         return qs
 
-    def remember(self, observation, model_input):
-        obs_norm = self.normaliser.outputs(observation, env=self.env, for_memory=True)
-        self.memory.store_memory(model_input=model_input, observation=obs_norm)
-
     def save_models(self):
         '''
         Saves parameters of each model in ensemble to directory
@@ -493,7 +467,6 @@ class Agent(Base):
             for param in m.parameters():
                 param.requires_grad(enable)
 
-    def plan(self):
 
 
 

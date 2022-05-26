@@ -153,16 +153,14 @@ class ModelFreeMemory:
         self.previous[self.obs_dim:] = state
 
 class ErodeMemory:
-    def __init__(self, agent, batch_size, window_size, hist_length, obs_dim, net_inp_dims):
+    def __init__(self, agent, batch_size, hist_length, obs_dim, net_inp_dims):
         self.model_inputs = []
         self.observations = []
         self.batch_size = batch_size
-        self.window_size = window_size
         self.hist_length = hist_length
         self.obs_dim = obs_dim # obs_dim + time_dim
         self.agent = agent
         self.net_inp_dims = net_inp_dims
-        self.window = np.zeros(shape=(self.obs_dim*self.window_size)) # number of prev states used to create obs
         self.history = np.zeros(shape=(hist_length, self.net_inp_dims))
 
     def generate_batches(self):
@@ -196,15 +194,6 @@ class ErodeMemory:
         '''
         self.history[:self.hist_length-1] = self.history[1:]
         self.history[-1] = window
-
-    def store_window(self, state):
-        '''
-        Takes current state and stores in window for use in creating observation (concat of prev states)
-        :param state: array of shape (obs_dim)
-        '''
-        self.window[self.obs_dim:] = self.window[:(self.window_size-1)*self.obs_dim]
-        self.window[:self.obs_dim] = state
-
 
     def clear_memory(self):
         '''

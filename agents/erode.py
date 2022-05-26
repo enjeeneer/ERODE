@@ -13,7 +13,7 @@ from .base import Base
 
 class Agent(Base):
     def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins=540, alpha=0.003, n_epochs=10,
-                 batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=1, window_size=2, latent_dim=200,
+                 batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=3, latent_dim=200,
                  f_ode_dim=100, z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20,
                  solver='dopri5',q_dim=200, pi_dim=200, discount=0.99, mix_coeff=0.05,
                  rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1]):
@@ -69,7 +69,6 @@ class Agent(Base):
         self.epochs = n_epochs
         self.batch_size = batch_size
         self.horizon = horizon
-        self.window_size = window_size
         self.popsize = popsize
         self.expl_del = expl_del
         self.output_norm_range = output_norm_range
@@ -96,8 +95,8 @@ class Agent(Base):
         self.state_time_dim = self.state_dim + self.time_dim
         self.act_dim = len(self.act_space)
         self.state_act_dim = self.state_dim + self.time_dim + self.act_dim
-        self.network_input_dims = ((1 + self.window_size) * (self.state_dim + self.time_dim)) + self.act_dim
-        self.memory = ErodeMemory(agent=self.agent_name, batch_size=self.batch_size, window_size=self.window_size,
+        self.network_input_dims = self.state_dim + self.time_dim + self.act_dim
+        self.memory = ErodeMemory(agent=self.agent_name, batch_size=self.batch_size,
                                   hist_length=self.hist_length, obs_dim=self.state_dim + self.time_dim,
                                   net_inp_dims=self.network_input_dims)
 
@@ -215,7 +214,6 @@ class Agent(Base):
         cem_act_seqs = cem_act_seqs.clone().cpu().detach().numpy()
         cem_act_seqs = np.tile(cem_act_seqs, (self.particles, 1, 1, 1))  # [part, cem_actions, horizon, act_dim]
         state_tile = np.tile(init_state, (self.particles, self.popsize, 1))  # [particles, popsize, state_dim]
-        window = np.tile(self.memory.window, (self.particles, self.popsize, 1))  # [part, pop, window_size*state_dim]
         hist = np.tile(self.memory.history,
                        (self.particles, self.popsize, 1, 1))  # [part, pop, hist_length, state_act_dim]
 
@@ -242,7 +240,7 @@ class Agent(Base):
             # concat cem and policy actions
             actions = np.concatenate((cem_actions, pi_actions), axis=1) # [particles, popsize, act_dim]
 
-            state_action = np.concatenate((actions, state_tile, window), axis=2)
+            state_action = np.concatenate((actions, state_tile), axis=2)
             state_action = np.expand_dims(state_action, axis=2) # [part, popsize, 1, net_inp_dims]
             input = np.concatenate((hist, state_action), axis=2)  # [part, popsize, hist_length + 1, net_inp_dims]
             assert input.shape == (self.particles, self.popsize, self.hist_length + 1, self.network_input_dims)
@@ -255,10 +253,6 @@ class Agent(Base):
             # add time
             pred_states = self.normaliser.update_time(state_tensor=pred_states, init_date=self.TS_init_date,
                                                       init_time=self.TS_init_time, TS_step=i)
-
-            # update window with current state
-            window[:, :, self.state_time_dim:] = window[:, :, :(self.window_size - 1) * self.state_time_dim]
-            window[:, :, :self.state_time_dim] = state_tile
 
             # update history with current state-action
             hist[:, :, :-1, :] = hist[:, :, 1:, :]  # shift memory back one timestep
@@ -286,9 +280,9 @@ class Agent(Base):
 
         if self.n_steps <= self.exploration_steps:
             action_dict, action_norm = self.explore(prev_action)
-            window = np.concatenate((action_norm, obs, self.memory.window), axis=0)  # create window
-            window = np.expand_dims(window, axis=0) # [1, net_inp_dims]
-            model_input = np.concatenate((self.memory.history, window),
+            state_action = np.concatenate((action_norm, obs), axis=0)  # create state/action
+            state_action = np.expand_dims(state_action, axis=0) # [1, net_inp_dims]
+            model_input = np.concatenate((self.memory.history, state_action),
                                          axis=0)  # create model input [hist_lenght+1, net_inp_dims]
             assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
 
@@ -300,16 +294,15 @@ class Agent(Base):
 
             actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
             action = actions[0].cpu().detach().numpy() # take only first action
-            window = np.concatenate((action, obs, self.memory.window), axis=0)  # create window
-            window = np.expand_dims(window, axis=0)
-            model_input = np.concatenate((window, self.memory.history),
+            state_action = np.concatenate((action, obs), axis=0)  # create state/action
+            state_action = np.expand_dims(state_action, axis=0)
+            model_input = np.concatenate((state_action, self.memory.history),
                                          axis=0)  # create model input [hist_lenght+1, net_inp_dims]
             assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
 
             action_dict = self.normaliser.revert_actions(action)
 
-        self.memory.store_window(obs)
-        self.memory.store_history(window)
+        self.memory.store_history(state_action)
 
         return action_dict, model_input
 
@@ -434,50 +427,6 @@ class Agent(Base):
             for param in m.parameters():
                 param.requires_grad(enable)
 
-    def plan_2(self, observation, env, prev_action):
-        # normalise observation
-        obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
-
-        # exploration policy
-        if self.n_steps <= self.exploration_steps:
-            action_dict, action_norm = self.explore(prev_action)
-            window = np.concatenate((action_norm, obs, self.memory.window), axis=0)  # create window
-            window = np.expand_dims(window, axis=0)  # [1, net_inp_dims]
-            model_input = np.concatenate((self.memory.history, window),
-                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
-            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
-
-        else:
-            # store date/time for TS
-            min, hour, day, month = env.get_date()
-            self.TS_init_time = (min, hour)
-            self.TS_init_date = (day, month)
-
-
-
-
-            actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
-
-
-
-
-
-
-
-
-            action = actions[0].cpu().detach().numpy()  # take only first action
-            window = np.concatenate((action, obs, self.memory.window), axis=0)  # create window
-            window = np.expand_dims(window, axis=0)
-            model_input = np.concatenate((window, self.memory.history),
-                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
-            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
-
-            action_dict = self.normaliser.revert_actions(action)
-
-        self.memory.store_window(obs)
-        self.memory.store_history(window)
-
-        return action_dict, model_input
 
 
 

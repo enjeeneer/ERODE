@@ -234,7 +234,8 @@ class Normalize:
 
     def rewards(self, reward):
         '''
-        Scales rewards in region [-1, 0]
+        Takes vector of rewards from planned action sequences and scales in region [-1, 0]
+        :param reward: array of rewards of shape (popsize
         '''
         if T.is_tensor(reward):
             norm = ((reward - self.reward_low_T) / (self.reward_high_T - self.reward_low_T)) * (0 - (-1)) + (-1)

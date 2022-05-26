@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import torch
 import torch.nn as nn
 import torch as T
 from components.networks import LatentODE, DeterministicNetwork, Q
@@ -107,7 +108,8 @@ class Agent(Base):
         for i in range(self.horizon):
             disc_list.append(disc)
             disc *= self.discount
-        self.disc_vector = T.tensor(disc_list, dtype=T.float32)
+        self.disc_vector = T.tensor(disc_list, dtype=T.float32).unsqueeze(0) # [1, horizon]
+        self.disc_tensor = T.tile(self.disc_vector, dims=(self.particles, self.popsize, 1))
 
         ### CONFIGURE MODELS ###
         self.latent_ode_params = {
@@ -204,6 +206,7 @@ class Agent(Base):
 
         return mu
 
+    @torch.no_grad()
     def traj_sampler(self, init_state, stoch_acts):
         """
         Performs trajectory sampling using latent odes
@@ -231,7 +234,7 @@ class Agent(Base):
 
             if pi:
                 # sample some actions from policy
-                z = self.model.get_z0(hist[:, -int(self.popsize * self.mix_coeff):, :, :]) # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
+                z = self.model.get_z0(hist[:, -int(self.popsize * self.mix_coeff):, :, :], plan=True) # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
                 pi_actions = self.pi.sample_pi(z) # [particles, pi_actions, act_dim]
 
                 # update pi_act memory to give back to CEM
@@ -304,6 +307,7 @@ class Agent(Base):
 
         return action_dict, model_input
 
+    @torch.no_grad()
     def plan(self, observation, env, prev_action):
         """
 
@@ -405,104 +409,65 @@ class Agent(Base):
 
         self.memory.clear_memory()
 
-    def estimate_value(self, trajs):
-        '''
-        Takes popsize action sequences, runs each through a trajectory sampler to obtain P-many possible trajectories
-        per sequence and then calculates expected reward of said sequence
-        :param init_state: Tensor of initial normalised state of environment of shape (obs_dim,)
-        :param act_seqs: Tensor of candidate action sequences of shape (popsize, horizon)
-        :return rewards: Tensor of expected reward for each action sequence of shape (popsize,)
-        '''
+    @torch.no_grad()
+    def estimate_value(self, trajs, actions):
+        """
+        Takes array of trajectories and estimates their value. Doing so is a combination of calculating reward
+        from predicted trajectories and added the terminal value at horizon H
+        :param trajs: Tensor of trajectories (particles, popsize, horizon, state_dim)
+        :param actions: Tensor of action sequences used to generate trajs of shape (particles, popsize, horizon, act_dim)
+        :return exp_rewards: Tensor of expected rewards for each action sequence of shape (popsize,)
+        """
 
-        # trajectory reward
-        particle_trajs_revert = self.normaliser.model_predictions_to_tensor(particle_trajs)
-        rewards = self.planning_reward(particle_trajs_revert) # [popsize,]
+        # only calculate terminal value if we are using actions sampled from policy
+        if self.pi:
+            # terminal value
+            term_states = trajs[:, :, -(self.hist_length + 1):, :] # [particles, popsize, hist_length + 1, state_dim]
+            term_actions = actions[:, :, -(self.hist_length + 1):, :] # [particles, popsize, hist_length + 1, act_dim]
+            term_trajs = T.cat([term_actions, term_states], dim=3) # [particles, popsize, hist_length + 1, state_act_dim]
+            term_vals = self.terminal_value(term_trajs) # [particles, popsize]
+            assert term_vals.shape == (self.particles, self.popsize)
 
-        energy_elements = particle_trajs[:, :, :, self.energy_idx]
-        temp_elements = particle_trajs[:, :, :, self.temp_idx]
+        # unnormalise
+        trajs_revert = self.normaliser.model_predictions_to_tensor(trajs)
 
-        temp_penalties = T.minimum((self.lower_t - temp_elements) ** 2,
-                                   (self.upper_t - temp_elements) ** 2) * -self.theta
+        # temps
+        temp_elements = trajs_revert[:, :, :, self.temp_idx]
+        temp_penalties = T.minimum((self.lower_t - temp_elements) ** 2, (self.upper_t - temp_elements) ** 2) * -self.theta
         temp_rewards = T.where((self.lower_t >= temp_elements) | (self.upper_t <= temp_elements), temp_penalties,
                                T.tensor([0.0], dtype=T.double))  # zero if in correct range, penalty otherwise
+        temp = T.sum(temp_rewards, axis=[3])  # [particles, popsize, horizon]
 
-        # apply discounting to horizon
-        disc_temp_rewards = T.mul(temp_rewards, self.disc_vector)
-        temp_sum = T.sum(disc_temp_rewards, axis=[2, 3])  # sum across sensors and horizon
-        temp_mean = T.mean(temp_sum, axis=0)  # expectation across particles
+        # c02
+        energy_elements = trajs_revert[:, :, :, self.energy_idx]
+        c02_elements = trajs_revert[:, :, :, self.c02_idx]
+        energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
+        c02 = (c02_elements * energy_elements_kwh) * -self.phi # [particles, popsize, horizon]
 
-        if self.include_grid:
-            c02_elements = particle_trajs[:, :, :, self.c02_idx]
-            energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
-            c02 = (c02_elements * energy_elements_kwh) * -self.phi
+        # total
+        total = c02 + temp
+        total_disc = total * self.disc_tensor
+        total_norm = self.normaliser.rewards(total_disc) # [particles, popsize, horizon]
+        total_norm = T.sum(total_norm, dim=2) # [particles, popsize]
+        rewards = total_norm + term_vals
 
-            # discount
-            disc_c02 = T.mul(c02, self.disc_vector)
+        exp_rewards = T.mean(rewards, dim=0) # [popsize]
 
-            c02_sum = T.sum(disc_c02, axis=2)
-            c02_mean = T.mean(c02_sum, axis=0)
-            exp_reward = c02_mean + temp_mean
+        return exp_rewards
 
-        else:
-            energy_sum = T.sum(energy_elements, axis=2) * -self.beta  # get cumulative energy use across each act seq
-            energy_mean = T.mean(energy_sum, axis=0)  # take expectation across particles
-            exp_reward = energy_mean + temp_mean
+    @torch.no_grad()
+    def terminal_value(self, term_trajs):
+        """
+        Takes the final state of a trajectory (requiring hist_length prev states too), estimates z0, and calculates the
+        Q-values.
+        :param term_trajs: traj up to final state s_H of shape (popsize, hist_length + 1, state_act_dim)
+        :return qs: tensor of q values of shape (popsize,)
+        """
+        z0s = self.model.get_z0(term_trajs, plan=True) # [any, hist_length + 1, latent_dim]
+        acts = self.sample_pi(z0s, std=0) # [any, hist_length + 1, act_dim]
+        qs = torch.min(*self.Q(z0s, acts)) * (self.discount ** (self.horizon + 1))
 
-        # normalise rewards
-        exp_reward = self.normaliser.rewards(exp_reward)
-
-        # terminal value
-
-
-        return rewards, combined_actions
-
-    def terminal_value(self):
-
-    def planning_reward(self, particle_trajs: T.tensor):
-        '''
-        Takes particles trajectories and calculates expected reward for each action sequence
-        :param particle_trajs: Tensor of sampled particle trajectories of shape: (particles, popsize, horizon, state_dim)
-        :return exp_reward: Tensor of expected rewards for each action trajectory in popsize. Shape: (popsize,)
-        '''
-
-
-        energy_elements = particle_trajs[:, :, :, self.energy_idx]
-        temp_elements = particle_trajs[:, :, :, self.temp_idx]
-
-        temp_penalties = T.minimum((self.lower_t - temp_elements) ** 2,
-                                   (self.upper_t - temp_elements) ** 2) * -self.theta
-        temp_rewards = T.where((self.lower_t >= temp_elements) | (self.upper_t <= temp_elements), temp_penalties,
-                               T.tensor([0.0], dtype=T.double))  # zero if in correct range, penalty otherwise
-
-        # apply discounting to horizon
-        disc_temp_rewards = T.mul(temp_rewards, self.disc_vector)
-        temp_sum = T.sum(disc_temp_rewards, axis=[2, 3])  # sum across sensors and horizon
-        temp_mean = T.mean(temp_sum, axis=0)  # expectation across particles
-
-        if self.include_grid:
-            c02_elements = particle_trajs[:, :, :, self.c02_idx]
-            energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
-            c02 = (c02_elements * energy_elements_kwh) * -self.phi
-
-            # discount
-            disc_c02 = T.mul(c02, self.disc_vector)
-
-            c02_sum = T.sum(disc_c02, axis=2)
-            c02_mean = T.mean(c02_sum, axis=0)
-            exp_reward = c02_mean + temp_mean
-
-        else:
-            energy_sum = T.sum(energy_elements, axis=2) * -self.beta  # get cumulative energy use across each act seq
-            energy_mean = T.mean(energy_sum, axis=0)  # take expectation across particles
-            exp_reward = energy_mean + temp_mean
-
-        # normalise rewards
-        exp_reward = self.normaliser.rewards(exp_reward)
-
-        ### NEED TO ADD IN TERMINAL VALUE FUNCTION CALCULATION
-
-
-        return exp_reward
+        return qs
 
     def remember(self, observation, model_input):
         obs_norm = self.normaliser.outputs(observation, env=self.env, for_memory=True)

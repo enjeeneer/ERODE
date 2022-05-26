@@ -204,41 +204,42 @@ class Agent(Base):
 
         return mu
 
-    def traj_sampler(self, init_state, cem_act_seqs):
+    def traj_sampler(self, init_state, stoch_acts):
         """
         Performs trajectory sampling using latent odes
         :param init_state: array of more recent observation (state_dim,)
         :param act_seqs: numpy array of action sequences of shape (popsize, horizon, act_dim)
         :return trajs: array of trajectories of shape: (particles, N, horizon, state_dim)
         """
-        cem_act_seqs = cem_act_seqs.clone().cpu().detach().numpy()
-        cem_act_seqs = np.tile(cem_act_seqs, (self.particles, 1, 1, 1))  # [part, cem_actions, horizon, act_dim]
+        pi = self.mix_coeff > 0 # include pi actions
+        stoch_acts = stoch_acts.clone().cpu().detach().numpy()
+        stoch_acts = np.tile(stoch_acts, (self.particles, 1, 1, 1))  # [part, cem_actions, horizon, act_dim]
         state_tile = np.tile(init_state, (self.particles, self.popsize, 1))  # [particles, popsize, state_dim]
-        hist = np.tile(self.memory.history,
-                       (self.particles, self.popsize, 1, 1))  # [part, pop, hist_length, state_act_dim]
+        hist = np.tile(self.memory.history, (self.particles, self.popsize, 1, 1))  # [part, pop, hist_length, state_act_dim]
 
         # initialise trajectory and pi_action arrays
-        trajs = np.zeros(shape=(self.particles, self.CEM.popsize, self.horizon, self.state_dim + self.time_dim))
-        pi_act_seqs = np.zeros(shape=(self.particles, self.popsize * self.mix_coeff, self.horizon, self.act_dim))
+        trajs = np.zeros(shape=(self.particles, self.popsize * (1 - self.mix_coeff), self.horizon, self.state_dim + self.time_dim))
+        if pi:
+            pi_acts = np.zeros(shape=(self.particles, self.popsize * self.mix_coeff, self.horizon, self.act_dim))
 
         for i in range(self.horizon):
             # store traj
             trajs[:, :, i, :] = state_tile
 
             # format current state-action
-            cem_actions = cem_act_seqs[:, :, i, :] # [particles, cem_actions, act_dim]
+            stoch_actions = stoch_acts[:, :, i, :] # [particles, cem_actions, act_dim]
 
-            # sample some actions from policy
-            ### THIS ISNT RIGHT AND NEEDS TO BE FIXED; I CANT SAMPLE ONE PARTICLE ONLY ###
-            z = self.model.get_z0(hist[1, -int(self.popsize * self.mix_coeff):, :, :]) # [pi_actions, latent_dim]
-            z_tile = np.tile(z, self.particles, 1, 1) # [particles, pi_actions, latent_dim]
-            pi_actions = self.pi.sample_pi(z_tile) # [particles, pi_actions, act_dim]
+            if pi:
+                # sample some actions from policy
+                z = self.model.get_z0(hist[:, -int(self.popsize * self.mix_coeff):, :, :]) # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
+                pi_actions = self.pi.sample_pi(z) # [particles, pi_actions, act_dim]
 
-            # update pi_act memory to give back to CEM
-            pi_act_seqs[:, :, i, :] = pi_actions
+                # update pi_act memory to give back to CEM
+                pi_acts[:, :, i, :] = pi_actions
+                actions = np.concatenate((stoch_actions, pi_actions), axis=1)  # [particles, popsize, act_dim]
 
-            # concat cem and policy actions
-            actions = np.concatenate((cem_actions, pi_actions), axis=1) # [particles, popsize, act_dim]
+            else:
+                actions = stoch_actions
 
             state_action = np.concatenate((actions, state_tile), axis=2)
             state_action = np.expand_dims(state_action, axis=2) # [part, popsize, 1, net_inp_dims]
@@ -260,11 +261,8 @@ class Agent(Base):
 
             state_tile = pred_states.cpu().detach().numpy()
 
-        combined_acts = np.concatenate((cem_act_seqs, pi_act_seqs), axis=1) # [particles, popsize, horizon, act_dim]
+        combined_acts = np.concatenate((stoch_acts, pi_acts), axis=1) # [particles, popsize, horizon, act_dim]
         assert combined_acts.shape == (self.particles, self.popsize, self.horizon, self.act_dim)
-
-        # get zs for terminal value function
-
 
         return trajs, combined_acts
 
@@ -291,6 +289,74 @@ class Agent(Base):
             min, hour, day, month = env.get_date()
             self.TS_init_time = (min, hour)
             self.TS_init_date = (day, month)
+
+            actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
+            action = actions[0].cpu().detach().numpy() # take only first action
+            state_action = np.concatenate((action, obs), axis=0)  # create state/action
+            state_action = np.expand_dims(state_action, axis=0)
+            model_input = np.concatenate((state_action, self.memory.history),
+                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
+            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
+
+            action_dict = self.normaliser.revert_actions(action)
+
+        self.memory.store_history(state_action)
+
+        return action_dict, model_input
+
+    def plan(self, observation, env, prev_action):
+        """
+
+        """
+        obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
+
+        # Exploration Policy
+        if self.n_steps <= self.exploration_steps:
+            action_dict, action_norm = self.explore(prev_action)
+            state_action = np.concatenate((action_norm, obs), axis=0)  # create state/action
+            state_action = np.expand_dims(state_action, axis=0) # [1, net_inp_dims]
+            model_input = np.concatenate((self.memory.history, state_action),
+                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
+            assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
+
+        # Policy
+        else:
+            # store date/time for TS
+            min, hour, day, month = env.get_date()
+            self.TS_init_time = (min, hour)
+            self.TS_init_date = (day, month)
+
+            # CEM
+            print('...planning...')
+            mean, var, t = self.cfg.init_mean, self.cfg.init_var, 0
+            # cem optimisation loop
+            while (t < self.cfg.max_iters) and (T.max(var) > self.cfg.epsilon):
+                # sample stochastic actions
+                stoch_samples = int(self.cfg.popsize * (1 - self.cfg.mix_coeff))
+                dist = TruncatedNormal(loc=mean, scale=var, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
+                stoch_acts = dist.sample(sample_shape=[stoch_samples,])  # output popsize x horizon x action_dims matrix
+                stoch_acts = T.where(stoch_acts < self.act_norm_low, self.act_norm_low, stoch_acts) # clip
+                stoch_acts = T.where(stoch_acts > self.act_norm_high, self.act_norm_high, stoch_acts) # clip
+
+                trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
+
+                exp_rewards = self.estimate_value(trajs)  # returns pi_actions appended to CEM actions
+                elites = combined_actions[np.argsort(exp_rewards)][:self.num_elites]
+
+                new_mean = T.mean(elites, axis=0)
+                new_var = T.var(elites, axis=0)
+
+                mean = self.alpha * mean + (1 - self.alpha) * new_mean
+                var = self.alpha * var + (1 - self.alpha) * new_var
+
+                t += 1
+
+            optimal_action_sequence = mean  # select first action from optimal action sequence
+
+            return optimal_action_sequence
+
+
+
 
             actions = self.CEM.optimal_action(obs, self.cem_init_mean, self.cem_init_var)
             action = actions[0].cpu().detach().numpy() # take only first action
@@ -339,7 +405,7 @@ class Agent(Base):
 
         self.memory.clear_memory()
 
-    def estimate_value(self, init_state: np.array, cem_act_seqs: T.tensor):
+    def estimate_value(self, trajs):
         '''
         Takes popsize action sequences, runs each through a trajectory sampler to obtain P-many possible trajectories
         per sequence and then calculates expected reward of said sequence
@@ -348,14 +414,49 @@ class Agent(Base):
         :return rewards: Tensor of expected reward for each action sequence of shape (popsize,)
         '''
 
-        particle_trajs, combined_actions = self.traj_sampler(init_state, cem_act_seqs)
+        # trajectory reward
         particle_trajs_revert = self.normaliser.model_predictions_to_tensor(particle_trajs)
         rewards = self.planning_reward(particle_trajs_revert) # [popsize,]
 
-        # value
+        energy_elements = particle_trajs[:, :, :, self.energy_idx]
+        temp_elements = particle_trajs[:, :, :, self.temp_idx]
+
+        temp_penalties = T.minimum((self.lower_t - temp_elements) ** 2,
+                                   (self.upper_t - temp_elements) ** 2) * -self.theta
+        temp_rewards = T.where((self.lower_t >= temp_elements) | (self.upper_t <= temp_elements), temp_penalties,
+                               T.tensor([0.0], dtype=T.double))  # zero if in correct range, penalty otherwise
+
+        # apply discounting to horizon
+        disc_temp_rewards = T.mul(temp_rewards, self.disc_vector)
+        temp_sum = T.sum(disc_temp_rewards, axis=[2, 3])  # sum across sensors and horizon
+        temp_mean = T.mean(temp_sum, axis=0)  # expectation across particles
+
+        if self.include_grid:
+            c02_elements = particle_trajs[:, :, :, self.c02_idx]
+            energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
+            c02 = (c02_elements * energy_elements_kwh) * -self.phi
+
+            # discount
+            disc_c02 = T.mul(c02, self.disc_vector)
+
+            c02_sum = T.sum(disc_c02, axis=2)
+            c02_mean = T.mean(c02_sum, axis=0)
+            exp_reward = c02_mean + temp_mean
+
+        else:
+            energy_sum = T.sum(energy_elements, axis=2) * -self.beta  # get cumulative energy use across each act seq
+            energy_mean = T.mean(energy_sum, axis=0)  # take expectation across particles
+            exp_reward = energy_mean + temp_mean
+
+        # normalise rewards
+        exp_reward = self.normaliser.rewards(exp_reward)
+
+        # terminal value
 
 
         return rewards, combined_actions
+
+    def terminal_value(self):
 
     def planning_reward(self, particle_trajs: T.tensor):
         '''
@@ -426,6 +527,8 @@ class Agent(Base):
         for m in [self.Q1, self.Q2]:
             for param in m.parameters():
                 param.requires_grad(enable)
+
+    def plan(self):
 
 
 

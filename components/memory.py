@@ -153,8 +153,9 @@ class ModelFreeMemory:
         self.previous[self.obs_dim:] = state
 
 class ErodeMemory:
-    def __init__(self, batch_size, hist_length, horizon, traj_samples, obs_dim, net_inp_dims):
+    def __init__(self, batch_size, hist_length, horizon, traj_batches, obs_dim, act_dim, net_inp_dims):
         self.model_inputs = []
+        self.actions = []
         self.obs_next = []
         self.rewards = []
         self.batch_size = batch_size
@@ -162,6 +163,7 @@ class ErodeMemory:
         self.traj_batches = traj_batches
         self.hist_length = hist_length
         self.obs_dim = obs_dim # obs_dim + time_dim
+        self.act_dim = act_dim
         self.net_inp_dims = net_inp_dims
         self.history = np.zeros(shape=(hist_length, self.net_inp_dims))
 
@@ -178,6 +180,7 @@ class ErodeMemory:
 
         # samples trajectories
         inp_trajs = np.zeros(shape=(self.traj_batches, self.horizon, self.net_inp_dims))
+        act_trajs = np.zeros(shape=(self.traj_batches, self.horizon, self.act_dim))
         obs_trajs = np.zeros(shape=(self.traj_batches, self.horizon, self.obs_dim))
         reward_trajs = np.zeros(shape=(self.traj_batches, self.horizon, 1))
 
@@ -187,11 +190,13 @@ class ErodeMemory:
 
             # index into memory
             inps = self.model_inputs[traj_idxs]
+            acts = self.actions[traj_idxs]
             obs = self.obs_next[traj_idxs]
             rewards = self.rewards[traj_idxs]
 
             # add to sample
             inp_trajs[i, :, :] = inps
+            act_trajs[i, :, :] = acts
             obs_trajs[i, :, :] = obs
             reward_trajs[i, :, :] = rewards
 
@@ -213,7 +218,7 @@ class ErodeMemory:
             inp_model[i, :, :] = inps
             obs_model[i, :, :] = outs
 
-        return inp_model, obs_model, inp_trajs, obs_trajs, reward_trajs
+        return inp_model, obs_model, inp_trajs, act_trajs, obs_trajs, reward_trajs
 
     def store(self, model_input, obs, obs_next, reward):
         '''

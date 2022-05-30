@@ -16,7 +16,7 @@ class Agent(Base):
     def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins=540, alpha=0.003, n_epochs=10,
                  batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=3, latent_dim=200,
                  f_ode_dim=100, z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20,
-                 solver='dopri5',q_dim=200, pi_dim=200, discount=0.99, mix_coeff=0.05,
+                 solver='dopri5', q_dim=200, pi_dim=200, discount=0.99, mix_coeff=0.05,
                  rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1]):
 
         ### AGENT PROPERTIES ###
@@ -108,7 +108,7 @@ class Agent(Base):
         for i in range(self.horizon):
             disc_list.append(disc)
             disc *= self.discount
-        self.disc_vector = T.tensor(disc_list, dtype=T.float32).unsqueeze(0) # [1, horizon]
+        self.disc_vector = T.tensor(disc_list, dtype=T.float32).unsqueeze(0)  # [1, horizon]
         self.disc_tensor = T.tile(self.disc_vector, dims=(self.particles, self.popsize, 1))
 
         ### CONFIGURE MODELS ###
@@ -190,14 +190,16 @@ class Agent(Base):
         :param act_seqs: numpy array of action sequences of shape (popsize, horizon, act_dim)
         :return trajs: array of trajectories of shape: (particles, N, horizon, state_dim)
         """
-        pi = self.mix_coeff > 0 # include pi actions
+        pi = self.mix_coeff > 0  # include pi actions
         stoch_acts = stoch_acts.clone().cpu().detach().numpy()
         stoch_acts = np.tile(stoch_acts, (self.particles, 1, 1, 1))  # [part, cem_actions, horizon, act_dim]
         state_tile = np.tile(init_state, (self.particles, self.popsize, 1))  # [particles, popsize, state_dim]
-        hist = np.tile(self.memory.history, (self.particles, self.popsize, 1, 1))  # [part, pop, hist_length, state_act_dim]
+        hist = np.tile(self.memory.history,
+                       (self.particles, self.popsize, 1, 1))  # [part, pop, hist_length, state_act_dim]
 
         # initialise trajectory and pi_action arrays
-        trajs = np.zeros(shape=(self.particles, self.popsize * (1 - self.mix_coeff), self.horizon, self.state_dim + self.time_dim))
+        trajs = np.zeros(
+            shape=(self.particles, self.popsize * (1 - self.mix_coeff), self.horizon, self.state_dim + self.time_dim))
         if pi:
             pi_acts = np.zeros(shape=(self.particles, self.popsize * self.mix_coeff, self.horizon, self.act_dim))
 
@@ -206,12 +208,13 @@ class Agent(Base):
             trajs[:, :, i, :] = state_tile
 
             # format current state-action
-            stoch_actions = stoch_acts[:, :, i, :] # [particles, cem_actions, act_dim]
+            stoch_actions = stoch_acts[:, :, i, :]  # [particles, cem_actions, act_dim]
 
             if pi:
                 # sample some actions from policy
-                z = self.model.get_z0(hist[:, -int(self.popsize * self.mix_coeff):, :, :], plan=True) # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
-                pi_actions = self.pi.sample_pi(z) # [particles, pi_actions, act_dim]
+                z = self.model.get_z0(hist[:, -int(self.popsize * self.mix_coeff):, :, :],
+                                      plan=True)  # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
+                pi_actions = self.pi.sample_pi(z)  # [particles, pi_actions, act_dim]
 
                 # update pi_act memory to give back to CEM
                 pi_acts[:, :, i, :] = pi_actions
@@ -221,7 +224,7 @@ class Agent(Base):
                 actions = stoch_actions
 
             state_action = np.concatenate((actions, state_tile), axis=2)
-            state_action = np.expand_dims(state_action, axis=2) # [part, popsize, 1, net_inp_dims]
+            state_action = np.expand_dims(state_action, axis=2)  # [part, popsize, 1, net_inp_dims]
             input = np.concatenate((hist, state_action), axis=2)  # [part, popsize, hist_length + 1, net_inp_dims]
             assert input.shape == (self.particles, self.popsize, self.hist_length + 1, self.network_input_dims)
 
@@ -240,7 +243,7 @@ class Agent(Base):
 
             state_tile = pred_states.cpu().detach().numpy()
 
-        combined_acts = np.concatenate((stoch_acts, pi_acts), axis=1) # [particles, popsize, horizon, act_dim]
+        combined_acts = np.concatenate((stoch_acts, pi_acts), axis=1)  # [particles, popsize, horizon, act_dim]
         assert combined_acts.shape == (self.particles, self.popsize, self.horizon, self.act_dim)
 
         return trajs, combined_acts
@@ -256,7 +259,7 @@ class Agent(Base):
         if self.n_steps <= self.exploration_steps:
             action_dict, action_norm = self.explore(prev_action)
             state_action = np.concatenate((action_norm, obs), axis=0)  # create state/action
-            state_action = np.expand_dims(state_action, axis=0) # [1, net_inp_dims]
+            state_action = np.expand_dims(state_action, axis=0)  # [1, net_inp_dims]
             model_input = np.concatenate((self.memory.history, state_action),
                                          axis=0)  # create model input [hist_lenght+1, net_inp_dims]
             assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
@@ -276,9 +279,10 @@ class Agent(Base):
                 # sample stochastic actions
                 stoch_samples = int(self.cfg.popsize * (1 - self.cfg.mix_coeff))
                 dist = TruncatedNormal(loc=mean, scale=var, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
-                stoch_acts = dist.sample(sample_shape=[stoch_samples,])  # output popsize x horizon x action_dims matrix
-                stoch_acts = T.where(stoch_acts < self.act_norm_low, self.act_norm_low, stoch_acts) # clip
-                stoch_acts = T.where(stoch_acts > self.act_norm_high, self.act_norm_high, stoch_acts) # clip
+                stoch_acts = dist.sample(
+                    sample_shape=[stoch_samples, ])  # output popsize x horizon x action_dims matrix
+                stoch_acts = T.where(stoch_acts < self.act_norm_low, self.act_norm_low, stoch_acts)  # clip
+                stoch_acts = T.where(stoch_acts > self.act_norm_high, self.act_norm_high, stoch_acts)  # clip
 
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
 
@@ -299,7 +303,8 @@ class Agent(Base):
             # variables for memory
             state_action = np.concatenate((action, obs), axis=0)  # create state/action
             state_action = np.expand_dims(state_action, axis=0)
-            model_input = np.concatenate((self.memory.history, state_action), axis=0)  # create model input [hist_lenght+1, net_inp_dims]
+            model_input = np.concatenate((self.memory.history, state_action),
+                                         axis=0)  # create model input [hist_lenght+1, net_inp_dims]
             assert model_input.shape == (self.hist_length + 1, self.network_input_dims)
 
             action_dict = self.normaliser.revert_actions(action)
@@ -317,34 +322,82 @@ class Agent(Base):
 
         print('...updating model parameters...')
         # generate batches
-        model_inp_array, obs_array, batches = self.memory.sample()
-        n_batches = len(batches)
+        inp_model, obs_model, inp_trajs, act_trajs, obs_trajs, reward_trajs = self.memory.sample()
 
         for epoch in range(self.epochs):
             if epoch % 5 == 0:
                 print('learning epoch:', epoch)
 
-            avg_loss = 0.0
+            # latent ode training
             self.kl_coef = 1 - 0.99 ** self.kl_cnt
             self.kl_cnt += 1
-
-            for batch in batches:
-                input_batch = T.tensor(model_inp_array[batch], dtype=T.float).to(self.device)
-                output_batch = T.tensor(obs_array[batch], dtype=T.float).to(self.device)
+            for i in range(inp_model.shape[0]):
+                input_batch = T.tensor(inp_model[i, :, :], dtype=T.float).to(self.device)
+                obs_batch = T.tensor(obs_model[i, :, :], dtype=T.float).to(self.device)
 
                 pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch)
-                loss = self.model.loss(pred_state_mean, output_batch, z_dists, self.kl_coef)
+                loss = self.model.loss(pred_state_mean, obs_batch, z_dists, self.kl_coef)
                 self.optimiser.zero_grad()
                 loss.backward()
                 self.optimiser.step()
-                avg_loss += loss / n_batches
+
+            with torch.no_grad():
+                zs = self.model.get_z0(inp_trajs)  # [traj_batches, horizon, 1]
+
+            # policy training
+            self.update_pi(zs)
+            ### NEED TO UPDATE THIS SO THAT I PASS CORRECT PART OF TENSOR
+
+            zs = zs.detach()
+
+            # value function training
+            Q1_loss, Q2_loss = 0, 0
+
+
+            for t in range(self.cfg.horizon):
+                self.Q1.optimizer.zero_grad()
+                self.Q2.optimizer.zero_grad()
+
+                Q1, Q2 = self.Q(zs[:, t, :], act_trajs[:, t, :])
+                z_, reward = zs[:, t + 1, :], reward_trajs[:, t, :]
+                td_target = self.td_target(z_, reward)
+
+                # losses
+                rho = (self.cfg.rho ** t)
+                Q1_loss += self.rho * (T.nn.functional.mse_loss(Q1, td_target))
+                Q2_loss += self.rho * (T.nn.functional.mse_loss(Q2, td_target))
+
+
+
+            Q1_loss.backward()
+            Q2_loss.backward()
+            self.Q1.optimizer.step()
+            self.Q2.optimizer.step()
+
+
 
         self.memory.clear_memory()
 
-    def Q(self, z, a):
+    def td_target(self, z_, reward):
+        """
+        Computes from a reward and the observation at the following timestep.
+        """
+        a_ = self.pi(z_, self.cfg.min_std)
+        td_target = reward + self.cfg.discout * T.min(*self.Q(z_, a_, target=True))
+
+        return td_target
+
+    def Q(self, z, a, target=False):
+        """
+        Computes value of a state-action using both Q functions
+        """
         x = T.cat([z, a], dim=-1)
 
-        return self.Q1(x), self.Q2(x)
+        if target:
+            return self.Q1_target(x), self.Q2_target(x)
+
+        else:
+            return self.Q1(x), self.Q2(x)
 
     def sample_pi(self, z, std=0.05):
         """
@@ -384,9 +437,6 @@ class Agent(Base):
         self.pi.optimizer.step()
         self.track_q_grad(True)
 
-        return pi_loss.item()
-
-
     @torch.no_grad()
     def estimate_value(self, trajs, actions):
         """
@@ -400,10 +450,11 @@ class Agent(Base):
         # only calculate terminal value if we are using actions sampled from policy
         if self.pi:
             # terminal value
-            term_states = trajs[:, :, -(self.hist_length + 1):, :] # [particles, popsize, hist_length + 1, state_dim]
-            term_actions = actions[:, :, -(self.hist_length + 1):, :] # [particles, popsize, hist_length + 1, act_dim]
-            term_trajs = T.cat([term_actions, term_states], dim=3) # [particles, popsize, hist_length + 1, state_act_dim]
-            term_vals = self.terminal_value(term_trajs) # [particles, popsize]
+            term_states = trajs[:, :, -(self.hist_length + 1):, :]  # [particles, popsize, hist_length + 1, state_dim]
+            term_actions = actions[:, :, -(self.hist_length + 1):, :]  # [particles, popsize, hist_length + 1, act_dim]
+            term_trajs = T.cat([term_actions, term_states],
+                               dim=3)  # [particles, popsize, hist_length + 1, state_act_dim]
+            term_vals = self.terminal_value(term_trajs)  # [particles, popsize]
             assert term_vals.shape == (self.particles, self.popsize)
 
         # unnormalise
@@ -411,7 +462,8 @@ class Agent(Base):
 
         # temps
         temp_elements = trajs_revert[:, :, :, self.temp_idx]
-        temp_penalties = T.minimum((self.lower_t - temp_elements) ** 2, (self.upper_t - temp_elements) ** 2) * -self.theta
+        temp_penalties = T.minimum((self.lower_t - temp_elements) ** 2,
+                                   (self.upper_t - temp_elements) ** 2) * -self.theta
         temp_rewards = T.where((self.lower_t >= temp_elements) | (self.upper_t <= temp_elements), temp_penalties,
                                T.tensor([0.0], dtype=T.double))  # zero if in correct range, penalty otherwise
         temp = T.sum(temp_rewards, axis=[3])  # [particles, popsize, horizon]
@@ -420,16 +472,16 @@ class Agent(Base):
         energy_elements = trajs_revert[:, :, :, self.energy_idx]
         c02_elements = trajs_revert[:, :, :, self.c02_idx]
         energy_elements_kwh = (energy_elements * (self.minutes_per_step / 60)) / 1000
-        c02 = (c02_elements * energy_elements_kwh) * -self.phi # [particles, popsize, horizon]
+        c02 = (c02_elements * energy_elements_kwh) * -self.phi  # [particles, popsize, horizon]
 
         # total
         total = c02 + temp
         total_disc = total * self.disc_tensor
-        total_norm = self.normaliser.rewards(total_disc) # [particles, popsize, horizon]
-        total_norm = T.sum(total_norm, dim=2) # [particles, popsize]
+        total_norm = self.normaliser.rewards(total_disc)  # [particles, popsize, horizon]
+        total_norm = T.sum(total_norm, dim=2)  # [particles, popsize]
         rewards = total_norm + term_vals
 
-        exp_rewards = T.mean(rewards, dim=0) # [popsize]
+        exp_rewards = T.mean(rewards, dim=0)  # [popsize]
 
         return exp_rewards
 
@@ -441,8 +493,8 @@ class Agent(Base):
         :param term_trajs: traj up to final state s_H of shape (popsize, hist_length + 1, state_act_dim)
         :return qs: tensor of q values of shape (popsize,)
         """
-        z0s = self.model.get_z0(term_trajs, plan=True) # [any, hist_length + 1, latent_dim]
-        acts = self.sample_pi(z0s, std=0) # [any, hist_length + 1, act_dim]
+        z0s = self.model.get_z0(term_trajs, plan=True)  # [any, hist_length + 1, latent_dim]
+        acts = self.sample_pi(z0s, std=0)  # [any, hist_length + 1, act_dim]
         qs = torch.min(*self.Q(z0s, acts)) * (self.discount ** (self.horizon + 1))
 
         return qs
@@ -466,8 +518,3 @@ class Agent(Base):
         for m in [self.Q1, self.Q2]:
             for param in m.parameters():
                 param.requires_grad(enable)
-
-
-
-
-

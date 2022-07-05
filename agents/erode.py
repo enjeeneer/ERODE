@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import torch
-import torch.nn as nn
 import torch as T
 from components.networks import LatentODE, DeterministicNetwork, Q
 from components.memory import ErodeMemory
@@ -13,11 +12,12 @@ from .base import Base
 
 
 class Agent(Base):
-    def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins=540, alpha=0.003, n_epochs=10,
+    def __init__(self, env, steps_per_day, env_name, models_dir, exploration_mins, alpha=0.003, n_epochs=10,
                  batch_size=32, horizon=20, beta=1, theta=1000, phi=1, hist_length=3, latent_dim=200,
                  f_ode_dim=100, z0_samples=10, z0_obs_std=0.01, hist_ode_dim=250, GRU_dim=100, particles=20,
                  solver='dopri5', q_dim=200, pi_dim=200, discount=0.99, mix_coeff=0.05,
-                 rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1]):
+                 rtol=1e-3, atol=1e-4, include_grid=True, popsize=25, expl_del=0.05, output_norm_range=[-1, 1],
+                 traj_batches=20):
 
         ### AGENT PROPERTIES ###
         self.agent_name = 'erode'
@@ -38,8 +38,6 @@ class Agent(Base):
             self.config = env_configs.SeminarcenterThermal()
         elif env_name == 'OfficesThermostat-v0':
             self.config = env_configs.Offices()
-        elif env_name == 'Apartments2Thermal-v0':
-            self.config = env_configs.Apartments2Thermal()
         self.cont_actions = self.config.continuous_actions
         self.temp_reward = self.config.temp_reward
         self.energy_reward_key = self.config.energy_reward[0]
@@ -72,6 +70,7 @@ class Agent(Base):
         self.horizon = horizon
         self.popsize = popsize
         self.expl_del = expl_del
+        self.traj_batches = traj_batches
         self.output_norm_range = output_norm_range
         self.output_norm_low = T.tensor([np.min(self.output_norm_range)], dtype=T.float).to(self.device)
         self.output_norm_high = T.tensor([np.max(self.output_norm_range)], dtype=T.float).to(self.device)
@@ -97,9 +96,9 @@ class Agent(Base):
         self.act_dim = len(self.act_space)
         self.state_act_dim = self.state_dim + self.time_dim + self.act_dim
         self.network_input_dims = self.state_dim + self.time_dim + self.act_dim
-        self.memory = ErodeMemory(agent=self.agent_name, batch_size=self.batch_size,
+        self.memory = ErodeMemory(batch_size=self.batch_size, horizon=self.horizon, traj_batches=self.traj_batches,
                                   hist_length=self.hist_length, obs_dim=self.state_dim + self.time_dim,
-                                  net_inp_dims=self.network_input_dims)
+                                  act_dim=self.act_dim, net_inp_dims=self.network_input_dims)
 
         # create discount vector
         disc_list = []
@@ -250,9 +249,7 @@ class Agent(Base):
 
     @torch.no_grad()
     def plan(self, observation, env, prev_action):
-        """
 
-        """
         obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
 
         # Exploration Policy
@@ -367,14 +364,10 @@ class Agent(Base):
                 Q1_loss += self.rho * (T.nn.functional.mse_loss(Q1, td_target))
                 Q2_loss += self.rho * (T.nn.functional.mse_loss(Q2, td_target))
 
-
-
             Q1_loss.backward()
             Q2_loss.backward()
             self.Q1.optimizer.step()
             self.Q2.optimizer.step()
-
-
 
         self.memory.clear_memory()
 

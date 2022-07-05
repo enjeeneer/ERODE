@@ -1,7 +1,6 @@
 import energym
 import numpy as np
 from agents.erode import Agent as ERODE
-import pickle
 from tqdm import tqdm
 import os
 import wandb
@@ -11,43 +10,31 @@ envs = {
     'SeminarcenterThermostat-v0': 'DNK_MJ_Horsens1',
     'OfficesThermostat-v0': 'GRC_A_Athens',
     'MixedUseFanFCU-v0': 'GRC_A_Athens',
-    # 'Apartments2Thermal-v0': 'ESP_CT_Barcelona',
 }
 
 envs_timesteps = {
     'OfficesThermostat-v0': 15,
     'SeminarcenterThermostat-v0': 10,
-    # 'Apartments2Thermal-v0': 3,
     'MixedUseFanFCU-v0': 15,
 }
 
 ### COMMAND LINE ARGS ###
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--batch_size', default=32, type=int)
-# parser.add_argument('--learning_rate', default=0.003, type=float)
-# parser.add_argument('--horizon', default=20, type=int)
-# parser.add_argument('--popsize', default=25, type=int)
-# parser.add_argument('--epochs', default=25, type=int)
-# parser.add_argument('--exploration_mins', default=25, type=int)
-# args = parser.parse_args()
-
-com_period = [
-    720,
-    1440,
-    2880,
-    5760
-]
+parser = argparse.ArgumentParser()
+parser.add_argument('--batch_size', default=32, type=int)
+parser.add_argument('--learning_rate', default=0.003, type=float)
+parser.add_argument('--horizon', default=20, type=int)
+parser.add_argument('--popsize', default=25, type=int)
+parser.add_argument('--epochs', default=25, type=int)
+parser.add_argument('--exploration_mins', default=25, type=int)
+args = parser.parse_args()
 
 if __name__ == '__main__':
     # energym setup
     for key, value in envs.items():
-        # for mins in com_period:
 
         # setup logging dirs
         id = np.random.randint(low=0, high=1000)
-        results_path = os.path.join(os.getcwd(), 'experiments', key, 'erode', str(id))
         models_path = os.path.join(os.getcwd(), 'tmp', key, 'erode', str(id))
-        os.mkdir(results_path, mode=0o666)
         os.mkdir(models_path, mode=0o666)
 
         years = 1
@@ -75,9 +62,6 @@ if __name__ == '__main__':
         )
         wandb.config.update(wandb_config)
 
-        print('### WANDB CONFIG ###')
-        print(wandb.config)
-
         weather = value
         env_name = key
         simulation_days = 365
@@ -88,20 +72,7 @@ if __name__ == '__main__':
         sim_steps = steps_per_day * simulation_days
         steps_per_month = steps_per_day * 31
 
-        # for exp in alpha:
-        # setup experiment logging
-
         for year in range(years):
-            output_name = 'outputs.pickle'
-            action_name = 'actions.pickle'
-            daily_score_name = 'daily_scores.pickle'
-            score_name = 'scores.pickle'
-
-            output_path = os.path.join(results_path, output_name)
-            action_path = os.path.join(results_path, action_name)
-            daily_score_path = os.path.join(results_path, daily_score_name)
-            score_path = os.path.join(results_path, score_name)
-
             env = energym.make(env_name, weather=weather, simulation_days=simulation_days)
             agent = ERODE(env=env,
                           steps_per_day=steps_per_day,
@@ -118,174 +89,70 @@ if __name__ == '__main__':
                           batch_size=wandb_config['batch_size']
                           )
 
-            if year > 0:
-                agent.load_models()
 
-            ### MAIN MODEL-BASED SCRIPT ###
-            if agent.model_based:
-                print('### RUNNING MODEL-BASED SCRIPT ###')
-                outputs = []
-                actions = []
-                learn_iters = 0
-                daily_scores = []
-                step_scores = []
-                avg_scores = []
+            print('### RUNNING MODEL-BASED SCRIPT ###')
+            learn_iters = 0
+            daily_scores = []
+            emissions = []
+            temps = []
 
-                emissions = []
-                temps = []
+            prev_action = agent.normaliser.revert_actions(
+                np.random.uniform(low=-1, high=1,
+                                  size=agent.act_dim))  # dummy variable for action selection at first timestep
 
-                prev_action = agent.normaliser.revert_actions(
-                    np.random.uniform(low=-1, high=1,
-                                      size=agent.act_dim))  # dummy variable for action selection at first timestep
-
-                observation = env.get_output()
+            observation = env.get_output()
+            if agent.include_grid:
+                observation = agent.add_c02(observation)
+            score = 0
+            for i in tqdm(range(sim_steps)):
+                action_dict, model_input, obs = agent.plan(observation, env, prev_action)
+                obs_next = env.step(action_dict)
                 if agent.include_grid:
-                    observation = agent.add_c02(observation)
-                score = 0
-                for i in tqdm(range(sim_steps)):
-                    action_dict, model_input, obs = agent.plan(observation, env, prev_action)
-                    obs_next = env.step(action_dict)
-                    if agent.include_grid:
-                        observation_ = agent.add_c02(obs_next)
-                    reward = agent.calculate_reward(obs_next)
-                    score += reward
-                    agent.n_steps += 1
-                    if agent.n_steps > agent.hist_length:
-                        agent.memory.store(model_input=model_input,
-                                           obs=obs,
-                                           obs_next=obs_next,
-                                           reward=reward
-                                           )
-                    outputs.append(obs_next)
-                    actions.append(action_dict)
-                    step_scores.append(reward)
-                    emissions.append(
-                        obs_next[agent.energy_reward_key] * (envs_timesteps[key] / 60) / 1000
-                        * (obs_next[agent.c02_reward_key] / 1000)
-                    )
-                    temps.append(obs_next['Z02_T'])
+                    observation_ = agent.add_c02(obs_next)
+                reward = agent.calculate_reward(obs_next)
+                score += reward
+                agent.n_steps += 1
+                if agent.n_steps > agent.hist_length:
+                    agent.memory.store(model_input=model_input,
+                                       obs=obs,
+                                       obs_next=obs_next,
+                                       reward=reward
+                                       )
+                emissions.append(
+                    obs_next[agent.energy_reward_key] * (envs_timesteps[key] / 60) / 1000
+                    * (obs_next[agent.c02_reward_key] / 1000)
+                )
+                temps.append(obs_next['Z02_T'])
 
-                    min, hour, day, month = env.get_date()
+                min, hour, day, month = env.get_date()
 
-                    # exploration phase update
-                    if (agent.n_steps < steps_per_day) and (agent.n_steps
-                                                            % (agent.batch_size + agent.hist_length) == 0):
-                        agent.learn()
-                        # wandb.log({'model_loss': model_loss})
-                        learn_iters += 1
-                        # agent.save_models()
+                # exploration phase update
+                if (agent.n_steps < steps_per_day) and (agent.n_steps
+                                                        % (agent.batch_size + agent.hist_length) == 0):
+                    agent.learn()
+                    learn_iters += 1
 
-                    # save models at end of commissioning period
-                    # if agent.n_steps == (wandb_config['exploration_mins'] / minutes_per_step):
-                    #     agent.save_models()
+                # normal update
+                if agent.n_steps % agent.steps_per_day == 0:
+                    agent.learn()
+                    agent.save_models()
+                    learn_iters += 1
 
-                    # normal update
-                    if agent.n_steps % agent.steps_per_day == 0:
-                        agent.learn()
-                        agent.save_models()
-                        learn_iters += 1
+                    daily_scores.append(score)
+                    avg_score = np.mean(daily_scores[-3:])
+                    _, _, day, month = env.get_date()
 
-                        daily_scores.append(score)
-                        avg_score = np.mean(daily_scores[-3:])
-                        avg_scores.append(avg_score)
-                        _, _, day, month = env.get_date()
+                    print('date:', day, '/', month, '--',
+                          'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
+                          'learning steps', learn_iters)
 
-                        print('date:', day, '/', month, '--',
-                              'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
-                              'learning steps', learn_iters)
+                    wandb.log({'mean_reward': avg_score})
+                    wandb.log({'av_zone_temp': np.mean(temps[-steps_per_day:])})
+                    wandb.log({'cum_emissions': sum(emissions)})
 
-                        wandb.log({'mean_reward': avg_score})
-                        # log in wandb
-                        wandb.log({'av_zone_temp': np.mean(temps[-steps_per_day:])})
-                        wandb.log({'cum_emissions': sum(emissions)})
+                    score = 0
 
-                        with open(output_path, 'wb') as f:
-                            pickle.dump(outputs, f)
+                observation = observation_
+                prev_action = action_dict
 
-                        with open(action_path, 'wb') as f:
-                            pickle.dump(actions, f)
-
-                        with open(daily_score_path, 'wb') as f:
-                            pickle.dump(daily_scores, f)
-
-                        with open(score_path, 'wb') as f:
-                            pickle.dump(step_scores, f)
-
-                        score = 0
-
-                    # if env_name == 'MixedUseFanFCU-v0':
-                    #     wandb.log({'flowrate setpoint': action_dict['Bd_Fl_AHU1_sp'][0]})
-
-                    observation = observation_
-                    prev_action = action_dict
-
-                env.close()
-
-            ### MAIN MODEL-FREE SCRIPT ###
-            elif agent.model_free:
-                print('### RUNNING MODEL-FREE SCRIPT ###')
-                outputs = []
-                actions = []
-                learn_iters = 0
-                mon_scores = []
-                step_scores = []
-                avg_scores = []
-
-                observation = env.get_output()
-                if agent.include_grid:
-                    observation = agent.add_c02(observation)
-                score = 0
-                for i in tqdm(range(sim_steps)):
-                    action_dict, inp, out = agent.choose_action(observation, env)
-                    observation_ = env.step(action_dict)
-                    if agent.include_grid:
-                        observation_ = agent.add_c02(observation_)
-                    reward = agent.calculate_reward(observation_)
-                    score += reward
-                    if agent.n_steps > agent.past_window_size:
-                        agent.store_reward(reward)
-                    agent.n_steps += 1
-
-                    outputs.append(observation_)
-                    actions.append(action_dict)
-                    step_scores.append(reward)
-                    min, hour, day, month = env.get_date()
-
-                    observation = observation_
-
-                    # model updates when memory length = batch size
-                    # if agent.n_steps % agent.batch_size == 0:
-                    #     agent.learn()
-                    #     learn_iters += 1
-
-                    if agent.n_steps % (steps_per_month) == 0:
-                        agent.learn()
-                        agent.save_models()
-                        mon_scores.append(score)
-                        avg_score = np.mean(mon_scores[-3:])
-                        avg_scores.append(avg_score)
-                        _, _, day, month = env.get_date()
-
-                        # with open(output_path, 'wb') as f:
-                        #     pickle.dump(outputs, f)
-                        #
-                        # with open(action_path, 'wb') as f:
-                        #     pickle.dump(actions, f)
-
-                        #
-                        # with open(daily_score_path, 'wb') as f:
-                        #     pickle.dump(daily_scores, f)
-                        #
-                        # with open(score_path, 'wb') as f:
-                        #     pickle.dump(step_scores, f)
-                        #
-                        print('date:', day, '/', month, '--',
-                              'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
-                              'learning steps', learn_iters)
-
-                        wandb.log({'monthly_score': score})
-
-                        score = 0
-
-                wandb.log({'annual_score': np.sum(step_scores)})
-                env.close()
+            env.close()

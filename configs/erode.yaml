@@ -1,0 +1,39 @@
+# agent params
+models_dir: '../tmp/model_testing'
+epochs: 10
+batch_size: 32
+traj_batches: 20
+alpha: 0.003
+gamma: 0.99
+expl_del: 0.05
+low_temp_goal: 19
+high_temp_goal: 24
+
+# ode-rnn params
+hist_length: 3
+latent_dim: 200
+enc_ode_dim: 250
+
+# forward network params
+z0_samples: 10
+obsrvd_std: 0.01
+for_ode_dim: 100
+
+# gru params
+GRU_unit: 100
+
+# policy params
+pi_dim: 200
+popsize: 25
+particles: 10
+horizon: 20
+mix_coeff: 0.05
+
+# q params
+q_dim: 200
+q_lr: 0.003
+
+# ode solver params
+solver: 'dopri5'
+rtol: 1e-3
+atol: 1e-4

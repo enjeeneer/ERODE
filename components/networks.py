@@ -119,25 +119,23 @@ class Q(nn.Module):
     """
     A Q-function with layer normalisation
     """
-    def __init__(self, config):
+    def __init__(self, cfg, act_dim):
         super(Q).__init__()
 
         self.model =  nn.Sequential(
-            nn.Linear(config['latent_dim']+config['act_dim'], config['q_dim']),
-            nn.LayerNorm(config['q_dim']),
+            nn.Linear(cfg.latent_dim+act_dim, cfg.q_dim),
+            nn.LayerNorm(cfg.q_dim),
             nn.Tanh(),
-            nn.Linear(config['q_dim'],config['q_dim']),
+            nn.Linear(cfg.q_dim,cfg.q_dim),
             nn.Tanh(),
-            nn.Linear(config['q_dim'], config['q_dim']),
+            nn.Linear(cfg.q_dim, cfg.q_dim),
             nn.ELU(),
-            nn.Linear(config['q_dim'], 1)
+            nn.Linear(cfg.q_dim, 1)
         )
 
-        self.optimizer = optim.Adam(self.parameters(), lr=config['q_lr'])
+        self.optimizer = optim.Adam(self.parameters(), lr=cfg.q_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
-
-
 
 ### LATENT ODE NETWORKS ###
 class ForwardODE(nn.Module):
@@ -145,14 +143,13 @@ class ForwardODE(nn.Module):
     Network that represents forward dynamics of environment.
     """
 
-    def __init__(self, param):
+    def __init__(self, cfg):
         super(ForwardODE, self).__init__()
-        self.param = param
-        self.hidden_layer = nn.Linear(self.param['latent_dim'], self.param['for_ode_f_dim'])
+        self.hidden_layer = nn.Linear(cfg.latent_dim, cfg.for_ode_dim)
         self.tanh = nn.Tanh()
-        self.hidden_layer_2 = nn.Linear(self.param['for_ode_f_dim'], self.param['for_ode_f_dim'])
+        self.hidden_layer_2 = nn.Linear(cfg.for_ode_dim, cfg.for_ode_dim)
         self.tanh2 = nn.Tanh()
-        self.output = nn.Linear(self.param['for_ode_f_dim'], self.param['latent_dim'])
+        self.output = nn.Linear(cfg.for_ode_dim, cfg.latent_dim)
 
     def forward(self, t, input):
         x = input
@@ -170,14 +167,13 @@ class HistoryODE(nn.Module):
     This take previous observations and helps estimate the latent state at the current timestep.
     '''
 
-    def __init__(self, param):
+    def __init__(self, cfg):
         super(HistoryODE, self).__init__()
-        self.param = param
-        self.hidden_layer = nn.Linear(self.param['latent_dim'], self.param['enc_ode_f_dim'])
+        self.hidden_layer = nn.Linear(cfg.latent_dim, cfg.enc_ode_dim)
         self.tanh = nn.Tanh()
-        self.hidden_layer_2 = nn.Linear(self.param['enc_ode_f_dim'], self.param['enc_ode_f_dim'])
+        self.hidden_layer_2 = nn.Linear(cfg.enc_ode_dim, cfg.enc_ode_dim)
         self.tanh2 = nn.Tanh()
-        self.output = nn.Linear(self.param['enc_ode_f_dim'], self.param['latent_dim'])
+        self.output = nn.Linear(cfg.enc_ode_dim, cfg.latent_dim)
 
     def forward(self, t, input):
         x = input
@@ -195,39 +191,39 @@ class GRU(nn.Module):
     Follows algo 1 from Rubanova et al. (2019).
     '''
 
-    def __init__(self, param):
+    def __init__(self, cfg, obs_act_dim):
+        self.cfg = cfg
         super(GRU, self).__init__()
-        self.param = param
         self.update_gate = nn.Sequential(
-            nn.Linear(self.param['latent_dim'] * 2 + self.param['state_action_dim'], self.param['GRU_unit']),
+            nn.Linear(cfg.latent_dim * 2 + obs_act_dim, cfg.GRU_unit),
             nn.Tanh(),
-            nn.Linear(self.param['GRU_unit'], self.param['latent_dim']),
+            nn.Linear(cfg.GRU_unit, cfg.latent_dim),
             nn.Sigmoid()
         )
         self.reset_gate = nn.Sequential(
-            nn.Linear(self.param['latent_dim'] * 2 + self.param['state_action_dim'], self.param['GRU_unit']),
+            nn.Linear(cfg.latent_dim * 2 + obs_act_dim, cfg.GRU_unit),
             nn.Tanh(),
-            nn.Linear(self.param['GRU_unit'], self.param['latent_dim']),
+            nn.Linear(cfg.GRU_unit, cfg.latent_dim),
             nn.Sigmoid()
         )
         self.new_state_gate = nn.Sequential(
-            nn.Linear(self.param['latent_dim'] * 2 + self.param['state_action_dim'], self.param['GRU_unit']),
+            nn.Linear(cfg.latent_dim * 2 + obs_act_dim, cfg.GRU_unit),
             nn.Tanh(),
-            nn.Linear(self.param['GRU_unit'], self.param['GRU_unit'])
+            nn.Linear(cfg.GRU_unit, cfg.GRU_unit)
         )
         self.new_state_mean = nn.Sequential(
-            nn.Linear(self.param['GRU_unit'], self.param['latent_dim'])
+            nn.Linear(cfg.GRU_unit, cfg.latent_dim)
         )
         self.new_state_std = nn.Sequential(
-            nn.Linear(self.param['GRU_unit'], self.param['latent_dim'])
+            nn.Linear(cfg.GRU_unit, cfg.latent_dim)
         )
 
     def forward(self, mean, std, obs):
-        y = T.cat([mean, std, obs], dim=-1).to(self.param['device']).to(
+        y = T.cat([mean, std, obs], dim=-1).to(self.cfg.device).to(
             T.float)  # mean and std should be output of ODE solve, obs is true value
         update = self.update_gate(y)
         reset = self.reset_gate(y)
-        y_concat = T.cat([mean * reset, std * reset, obs], -1).to(self.param['device']).to(T.float)
+        y_concat = T.cat([mean * reset, std * reset, obs], -1).to(self.cfg.device).to(T.float)
 
         new_state_hidden = self.new_state_gate(y_concat)
         new_state_mean = self.new_state_mean(new_state_hidden)
@@ -244,11 +240,12 @@ class OdeRNN(nn.Module):
     Takes history of observations and estimates current latent state.
     '''
 
-    def __init__(self, param):
+    def __init__(self, cfg, obs_act_dim):
         super(OdeRNN, self).__init__()
-        self.param = param
-        self.ode_func = HistoryODE(param)
-        self.gru = GRU(param)
+        self.cfg = cfg
+        self.obs_act_dim = obs_act_dim
+        self.ode_func = HistoryODE(cfg)
+        self.gru = GRU(cfg, obs_act_dim)
 
     def forward(self, history, train=True):
         '''
@@ -261,27 +258,27 @@ class OdeRNN(nn.Module):
         # these next 7 lines skip explicit encoding by going straight to ode_func which has latent_dims input
         if train:
             # initial guess at latent state is zeros for t_0
-            mean0 = T.zeros(history.shape[0], self.param['latent_dim'], device=self.param['device'])
-            std0 = T.zeros(history.shape[0], self.param['latent_dim'], device=self.param['device'])
+            mean0 = T.zeros(history.shape[0], self.cfg.latent_dim, device=self.cfg.device)
+            std0 = T.zeros(history.shape[0], self.cfg.latent_dim, device=self.cfg.device)
 
         else:
-            mean0 = T.zeros(self.param['particles'], history.shape[1], self.param['latent_dim'],
-                            device=self.param['device'])
-            std0 = T.zeros(self.param['particles'], history.shape[1], self.param['latent_dim'],
-                           device=self.param['device'])
+            mean0 = T.zeros(self.cfg.particles, history.shape[1], self.cfg.latent_dim,
+                            device=self.cfg.device)
+            std0 = T.zeros(self.cfg.particles, history.shape[1], self.cfg.latent_dim,
+                           device=self.cfg.device)
 
         mean_ode = odeint(func=self.ode_func,
                           y0=mean0,
-                          adjoint_method=self.param['solver'],
-                          t=T.tensor([0., 1.], dtype=T.float32, device=self.param['device']),
+                          adjoint_method=self.cfg.solver,
+                          t=T.tensor([0., 1.], dtype=T.float32, device=self.cfg.device),
                           # use odeint from t=0 to t=1
-                          rtol=self.param['rtol'],
-                          atol=self.param['atol']
+                          rtol=self.cfg.rtol,
+                          atol=self.cfg.atol
                           )[1]  # the [1] here gets us the estimate at the next timestep
 
         # get mean and std of first point in traj by inputting to GRU with first observation
         if train:
-            obs = history[:, 0, :].reshape(-1, self.param['state_action_dim'])
+            obs = history[:, 0, :].reshape(-1, self.obs_act_dim)
         else:
             obs = history[:, :, 0, :]
 
@@ -289,45 +286,34 @@ class OdeRNN(nn.Module):
 
         for i in range(1, history.shape[-2], 1):
             if train:
-                obs = history[:, i, :].reshape(-1, self.param['state_action_dim'])
+                obs = history[:, i, :].reshape(-1, self.obs_act_dim)
             else:
                 obs = history[:, :, i, :]
 
             mean_ode = odeint(func=self.ode_func,
                               y0=mean,
-                              adjoint_method=self.param['solver'],
+                              adjoint_method=self.cfg.solver,
                               t=T.tensor([i, i + 1], dtype=T.float32, device=self.param['device']),
-                              rtol=self.param['rtol'],
-                              atol=self.param['atol'])[1]
+                              rtol=self.cfg.rtol,
+                              atol=self.cfg.atol)[1]
             mean, std = self.gru(mean=mean_ode, std=std, obs=obs)
 
         return mean, std
 
 class LatentODE(nn.Module):
-    def __init__(self, param):
+    def __init__(self, cfg, obs_dim, obs_act_dim):
         super(LatentODE, self).__init__()
-        self.param = param
-        self.device = param['device']
-        self.epochs = param['n_epochs']
-        self.state_dim = param['state_dim']
-        self.hist_length = param['hist_length']
-        self.act_dim = param['act_dim']
-        self.state_act_dim = param['state_action_dim']
-        self.z0_samples = param['z0_samples']
-        self.batch_size = param['batch_size']
-        self.latent_dim = param['latent_dim']
-        self.obsrvd_std = param['obsrvd_std']
-        self.ode_func = ForwardODE(param)
-        self.ode_rnn = OdeRNN(param)
+        self.cfg = cfg
+        self.ode_func = ForwardODE(cfg)
+        self.ode_rnn = OdeRNN(cfg, obs_act_dim)
         self.decoder = nn.Sequential(
-            nn.Linear(param['latent_dim'], param['state_dim'])
+            nn.Linear(cfg.latent_dim, obs_dim)
         )
         self.encoder = nn.Sequential(
-            nn.Linear(param['latent_dim'] + param['state_action_dim'], param['latent_dim'])
+            nn.Linear(cfg.latent_dim + obs_act_dim, cfg.latent_dim)
         )
         self.mse = nn.MSELoss()
-        self.z0_prior = Normal(T.tensor([0.0], device=self.device), T.tensor([1.0], device=self.device))
-        self.traj_length = param['traj_length']
+        self.z0_prior = Normal(T.tensor([0.0], device=cfg.device), T.tensor([1.0], device=cfg.device))
         self.kl_cnt = 0
 
     def predict_next_state(self, history, train=True):
@@ -339,21 +325,21 @@ class LatentODE(nn.Module):
         :return:
         """
         if train:
-            assert history.shape[1] == self.hist_length + 1  # i.e. includes current state
+            assert history.shape[1] == self.cfg.hist_length + 1  # i.e. includes current state
             input_traj = history[:, :-1, :]
-            state_action = T.tile(history[:, -1, :], (self.z0_samples, 1, 1)) # # [z0_samples, batch_size, state_act_dim]
+            state_action = T.tile(history[:, -1, :], (self.cfg.z0_samples, 1, 1)) # # [z0_samples, batch_size, state_act_dim]
             z0s, z_dists = self.get_z0(input_traj, train=True)
         else:
-            assert history.shape[2] == self.hist_length + 1  # i.e. includes current state
+            assert history.shape[2] == self.cfg.hist_length + 1  # i.e. includes current state
             input_traj = history[:, :, :-1, :]
-            state_action = T.tensor(history[:, :, -1, :], dtype=T.float, device=self.device)  # # [z0_samples, batch_size, state_act_dim]
+            state_action = T.tensor(history[:, :, -1, :], dtype=T.float, device=self.cfg.device)  # # [z0_samples, batch_size, state_act_dim]
             z0s = self.get_z0(input_traj, plan=True)
 
-        eval_points = T.arange(start=0, end=2, step=1, dtype=T.float32, device=self.device)
+        eval_points = T.arange(start=0, end=2, step=1, dtype=T.float32, device=self.cfg.device)
 
         z_ = self.encoder(T.cat([z0s, state_action], dim=-1))
-        z_next = odeint(func=self.ode_func, y0=z_, method='dopri5', t=eval_points, rtol=self.param['rtol'],
-                        atol=self.param['atol'])[1]  # (num_time_points, z0_samples, batch_size, latent_dim)
+        z_next = odeint(func=self.ode_func, y0=z_, method=self.cfg.solver, t=eval_points, rtol=self.cfg.rtol,
+                        atol=self.cfg.atol)[1]  # (num_time_points, z0_samples, batch_size, latent_dim)
 
         pred_states = self.decoder(z_next)
 
@@ -380,7 +366,7 @@ class LatentODE(nn.Module):
 
             # get current latent state dist
             z0_dists = Normal(loc=mean_z0, scale=std_z0) # mean and std for each dim of latent dim
-            z0 = z0_dists.sample(sample_shape=(T.Size([self.z0_samples])))
+            z0 = z0_dists.sample(sample_shape=(T.Size([self.cfg.z0_samples])))
 
             return z0, z0_dists
 
@@ -395,11 +381,9 @@ class LatentODE(nn.Module):
             return z0
 
         else:
-            z0 = self.z0_prior.sample(sample_shape=(self.param['batch_size'], self.param['latent_dim']))
+            z0 = self.z0_prior.sample(sample_shape=(self.cfg.batch_size, self.cfg.latent_dim))
 
             return z0
-
-    def encoder(self, state):
 
     def loss(self, pred_states_mean, real_states, z0_dists, kl_coef):
         '''
@@ -417,7 +401,7 @@ class LatentODE(nn.Module):
         kl_div = kl_divergence(z0_dists, self.z0_prior)
         kl_div = kl_div.mean(axis=1)
 
-        gaussian = Independent(Normal(loc=pred_states_mean, scale=self.obsrvd_std), 1) # distribution over predicted datapoint in sequence
+        gaussian = Independent(Normal(loc=pred_states_mean, scale=self.cfg.obsrvd_std), 1) # distribution over predicted datapoint in sequence
         log_prob = gaussian.log_prob(real_states) # we get the log prob of the real datapoints if drawn from our predicted distributions (ideally should be close)
         log_likelihood = log_prob / pred_states_mean.shape[0] # expected log prob a.k.a likelihood across batch
 

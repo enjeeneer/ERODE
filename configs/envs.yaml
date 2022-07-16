@@ -1,4 +1,5 @@
 MixedUse:
+    env_name: 'MixedUseFanFCU-v0'
     redundant_observations: [
         'time',
         'Bd_Pw_All',  # building power consumption
@@ -43,8 +44,13 @@ MixedUse:
     energy_reward: 'Fa_Pw_All'  # total power consumption
     c02_reward: 'c02'
     weather: "GRC_A_Athens"
+    mins_per_step: 15
+    steps_per_day: 96
+    days: 365
+    time_dim: 4
 
 Offices:
+    env_name: 'OfficesThermostat-v0'
     redundant_observations: [
         'time',
         'Bd_Pw_All',  # building power consumption
@@ -96,8 +102,13 @@ Offices:
     energy_reward: 'Fa_Pw_All'  # total power consumption
     c02_reward: 'c02'
     weather: "GRC_A_Athens"
+    mins_per_step: 15
+    steps_per_day: 96
+    days: 365
+    time_dim: 4
 
 SeminarcenterThermal:
+    env_name: 'SeminarcenterThermostat-v0'
     redundant_observations: [
         'time',
         'Bd_Pw_boiler',
@@ -158,3 +169,7 @@ SeminarcenterThermal:
     energy_reward: 'Fa_Pw_All' # building power consumption
     c02_reward: 'Grid_CO2'
     weather: "DNK_MJ_Horsens1"
+    mins_per_step: 10
+    steps_per_day: 144
+    days: 365
+    time_dim: 4

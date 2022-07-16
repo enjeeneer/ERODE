@@ -8,15 +8,9 @@ class Base:
     General parent class that defines common model-based agent methods
     '''
 
-    def __init__(self, env, normaliser, memory, config, beta, theta, act_dim, energy_reward_key,
-                 temp_reward, lower_t, upper_t, n_steps, deltas, phi, include_grid, c02_reward_key,
-                 minutes_per_step, obs_space, cont_actions
-                 ):
-        self.env, self.normaliser, self.memory, self.config, self.beta = env, normaliser, memory, config, beta
-        self.energy_reward_key, self.temp_reward, self.theta = energy_reward_key, temp_reward, theta
-        self.lower_t, self.upper_t, self.n_steps, self.deltas, self.act_dim = lower_t, upper_t, n_steps, deltas, act_dim
-        self.phi, self.include_grid, self.c02_reward_key = phi, include_grid, c02_reward_key
-        self.minutes_per_step, self.obs_space, self.cont_actions = minutes_per_step, obs_space, cont_actions
+    def __init__(self, env, normaliser, memory, config, act_dim, obs_space, n_steps):
+        self.env, self.normaliser, self.memory, self.config = env, normaliser, memory, config
+        self.act_dim, self.obs_space, self.n_steps = act_dim, obs_space, n_steps
 
     def remember(self, observation, model_input):
         '''

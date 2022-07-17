@@ -1,11 +1,8 @@
+import torch
+import datetime
 import numpy as np
 from copy import deepcopy
-
-import torch
 from energym.spaces.box import Box
-import datetime
-import torch as T
-
 
 class Normalize:
     def __init__(self, env, cfg):
@@ -42,8 +39,8 @@ class Normalize:
         output_lower_bound_T.extend([0] * 4)  # for date/time features
         output_upper_bound_T.extend([1] * 4)
 
-        self.output_lower_bound_T = T.tensor(output_lower_bound_T, requires_grad=False)
-        self.output_upper_bound_T = T.tensor(output_upper_bound_T, requires_grad=False)
+        self.output_lower_bound_T = torch.tensor(output_lower_bound_T, requires_grad=False)
+        self.output_upper_bound_T = torch.tensor(output_upper_bound_T, requires_grad=False)
 
         ### ACTION SPACE BOUNDS ###
         cont_keys = [p for p in list(self.env.input_space.spaces.keys()) if isinstance(self.env.input_space[p], Box)]
@@ -110,7 +107,7 @@ class Normalize:
         :return: Unnormalised tensor of shape: (*, obs_dim)
         '''
 
-        return ((T.tensor(outputs, dtype=float, requires_grad=False) + 1) / 2) * (
+        return ((torch.tensor(outputs, dtype=float, requires_grad=False) + 1) / 2) * (
                     self.output_upper_bound_T - self.output_lower_bound_T) + self.output_lower_bound_T
 
     def revert_actions(self, actions: np.array):
@@ -172,7 +169,7 @@ class Normalize:
 
         return actions
 
-    def update_time(self, state_tensor: T.tensor, init_date: tuple, init_time: tuple, TS_step: int):
+    def update_time(self, state_tensor: torch.tensor, init_date: tuple, init_time: tuple, TS_step: int):
         '''
         Takes state tensor as predicted by trajectory sampler and adds datetime features given the datestime at start
         of trajectory sampling and number of elapsed steps in sampler.
@@ -202,16 +199,16 @@ class Normalize:
 
         # concat to tensor
         if self.cfg.name == 'pets' or self.cfg.name == 'erode':
-            time_tensor = T.tile(T.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
+            time_tensor = torch.tile(torch.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
                                  [state_tensor.shape[0], state_tensor.shape[1], 1]).to(self.cfg.device)
 
         elif self.cfg.name == 'mpc':
-            time_tensor = T.tile(T.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
+            time_tensor = torch.tile(torch.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
                                  [state_tensor.shape[0], 1]).to(self.cfg.device)
 
-        return T.cat((state_tensor, time_tensor), dim=-1)
+        return torch.cat((state_tensor, time_tensor), dim=-1)
 
 
 

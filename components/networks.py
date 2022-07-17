@@ -8,7 +8,7 @@ from torch.distributions import kl_divergence, Independent
 
 
 class MLP(nn.Module):
-    def __init__(self, output_dims, input_dims, chkpt_path,
+    def __init__(self, output_dims, input_dims, chkpt_path, device,
                  output_lower_bound=-1, output_upper_bound=1, hidden_dims=200, alpha=0.0003):
         super(MLP, self).__init__()
 
@@ -26,7 +26,7 @@ class MLP(nn.Module):
         )
 
         self.optimizer = optim.Adam(self.parameters(), lr=alpha)
-        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.device = device
         self.to(self.device)
         self.sigmoid = nn.Sigmoid()
         self.output_lower_bound = output_lower_bound
@@ -52,7 +52,7 @@ class Q(nn.Module):
     """
     A Q-function with layer normalisation
     """
-    def __init__(self, cfg, act_dim):
+    def __init__(self, cfg, act_dim, device):
         super(Q).__init__()
 
         self.model =  nn.Sequential(
@@ -67,7 +67,7 @@ class Q(nn.Module):
         )
 
         self.optimizer = optim.Adam(self.parameters(), lr=cfg.q_lr)
-        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.device = device
         self.to(self.device)
 
 ### LATENT ODE NETWORKS ###
@@ -152,11 +152,11 @@ class GRU(nn.Module):
         )
 
     def forward(self, mean, std, obs):
-        y = T.cat([mean, std, obs], dim=-1).to(self.cfg.device).to(
+        y = T.cat([mean, std, obs], dim=-1).to(self.device).to(
             T.float)  # mean and std should be output of ODE solve, obs is true value
         update = self.update_gate(y)
         reset = self.reset_gate(y)
-        y_concat = T.cat([mean * reset, std * reset, obs], -1).to(self.cfg.device).to(T.float)
+        y_concat = T.cat([mean * reset, std * reset, obs], -1).to(self.device).to(T.float)
 
         new_state_hidden = self.new_state_gate(y_concat)
         new_state_mean = self.new_state_mean(new_state_hidden)
@@ -173,9 +173,10 @@ class OdeRNN(nn.Module):
     Takes history of observations and estimates current latent state.
     '''
 
-    def __init__(self, cfg, obs_act_dim):
+    def __init__(self, cfg, obs_act_dim, device):
         super(OdeRNN, self).__init__()
         self.cfg = cfg
+        self.device = device
         self.obs_act_dim = obs_act_dim
         self.ode_func = HistoryODE(cfg)
         self.gru = GRU(cfg, obs_act_dim)
@@ -191,19 +192,19 @@ class OdeRNN(nn.Module):
         # these next 7 lines skip explicit encoding by going straight to ode_func which has latent_dims input
         if train:
             # initial guess at latent state is zeros for t_0
-            mean0 = T.zeros(history.shape[0], self.cfg.latent_dim, device=self.cfg.device)
-            std0 = T.zeros(history.shape[0], self.cfg.latent_dim, device=self.cfg.device)
+            mean0 = T.zeros(history.shape[0], self.cfg.latent_dim, device=self.device)
+            std0 = T.zeros(history.shape[0], self.cfg.latent_dim, device=self.device)
 
         else:
             mean0 = T.zeros(self.cfg.particles, history.shape[1], self.cfg.latent_dim,
-                            device=self.cfg.device)
+                            device=self.device)
             std0 = T.zeros(self.cfg.particles, history.shape[1], self.cfg.latent_dim,
-                           device=self.cfg.device)
+                           device=self.device)
 
         mean_ode = odeint(func=self.ode_func,
                           y0=mean0,
                           adjoint_method=self.cfg.solver,
-                          t=T.tensor([0., 1.], dtype=T.float32, device=self.cfg.device),
+                          t=T.tensor([0., 1.], dtype=T.float32, device=self.device),
                           # use odeint from t=0 to t=1
                           rtol=self.cfg.rtol,
                           atol=self.cfg.atol
@@ -226,7 +227,7 @@ class OdeRNN(nn.Module):
             mean_ode = odeint(func=self.ode_func,
                               y0=mean,
                               adjoint_method=self.cfg.solver,
-                              t=T.tensor([i, i + 1], dtype=T.float32, device=self.param['device']),
+                              t=T.tensor([i, i + 1], dtype=T.float32, device=self.device),
                               rtol=self.cfg.rtol,
                               atol=self.cfg.atol)[1]
             mean, std = self.gru(mean=mean_ode, std=std, obs=obs)
@@ -234,11 +235,12 @@ class OdeRNN(nn.Module):
         return mean, std
 
 class LatentODE(nn.Module):
-    def __init__(self, cfg, obs_dim, obs_act_dim):
+    def __init__(self, cfg, obs_dim, obs_act_dim, device):
         super(LatentODE, self).__init__()
         self.cfg = cfg
+        self.device = device
         self.ode_func = ForwardODE(cfg)
-        self.ode_rnn = OdeRNN(cfg, obs_act_dim)
+        self.ode_rnn = OdeRNN(cfg, obs_act_dim, device)
         self.decoder = nn.Sequential(
             nn.Linear(cfg.latent_dim, obs_dim)
         )
@@ -246,7 +248,7 @@ class LatentODE(nn.Module):
             nn.Linear(cfg.latent_dim + obs_act_dim, cfg.latent_dim)
         )
         self.mse = nn.MSELoss()
-        self.z0_prior = Normal(T.tensor([0.0], device=cfg.device), T.tensor([1.0], device=cfg.device))
+        self.z0_prior = Normal(T.tensor([0.0], device=device), T.tensor([1.0], device=device))
         self.kl_cnt = 0
 
     def predict_next_state(self, history, train=True):
@@ -265,10 +267,10 @@ class LatentODE(nn.Module):
         else:
             assert history.shape[2] == self.cfg.hist_length + 1  # i.e. includes current state
             input_traj = history[:, :, :-1, :]
-            state_action = T.tensor(history[:, :, -1, :], dtype=T.float, device=self.cfg.device)  # # [z0_samples, batch_size, state_act_dim]
+            state_action = T.tensor(history[:, :, -1, :], dtype=T.float, device=self.device)  # # [z0_samples, batch_size, state_act_dim]
             z0s = self.get_z0(input_traj, plan=True)
 
-        eval_points = T.arange(start=0, end=2, step=1, dtype=T.float32, device=self.cfg.device)
+        eval_points = T.arange(start=0, end=2, step=1, dtype=T.float32, device=self.device)
 
         z_ = self.encoder(T.cat([z0s, state_action], dim=-1))
         z_next = odeint(func=self.ode_func, y0=z_, method=self.cfg.solver, t=eval_points, rtol=self.cfg.rtol,

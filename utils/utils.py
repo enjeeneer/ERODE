@@ -5,9 +5,10 @@ from copy import deepcopy
 from energym.spaces.box import Box
 
 class Normalize:
-    def __init__(self, env, cfg):
+    def __init__(self, env, cfg, device):
         self.env = env
         self.cfg = cfg
+        self.device = device
         self.act_space = [key for key in env.get_inputs_names() if key not in cfg.red_act]
         self.obs_space = [key for key in env.get_outputs_names() if key not in cfg.red_obs]
 
@@ -201,12 +202,12 @@ class Normalize:
         if self.cfg.name == 'pets' or self.cfg.name == 'erode':
             time_tensor = torch.tile(torch.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
-                                 [state_tensor.shape[0], state_tensor.shape[1], 1]).to(self.cfg.device)
+                                 [state_tensor.shape[0], state_tensor.shape[1], 1]).to(self.device)
 
         elif self.cfg.name == 'mpc':
             time_tensor = torch.tile(torch.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
-                                 [state_tensor.shape[0], 1]).to(self.cfg.device)
+                                 [state_tensor.shape[0], 1]).to(self.device)
 
         return torch.cat((state_tensor, time_tensor), dim=-1)
 

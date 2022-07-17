@@ -26,29 +26,27 @@ if __name__ == '__main__':
         years = 1
 
         ## WANDB SETUP ###
-        wandb.init(
-            project='erode',
-            entity="enjeeneer",
-            config=dict(cfg),
-            tags=['erode-testing'],
-        )
-        wandb.config.update(dict(cfg))
+        # wandb.init(
+        #     project='erode',
+        #     entity="enjeeneer",
+        #     config=dict(cfg),
+        #     tags=['erode-testing'],
+        # )
+        # wandb.config.update(dict(cfg))
 
         N = int((60 * 24) / cfg.mins_per_step)  # make model updates at end of each day
         steps_per_day = int((60 * 24) / cfg.mins_per_step)
-        sim_steps = steps_per_day * cfg.simulation_days
+        sim_steps = steps_per_day * cfg.days
 
         cfg.steps_per_day = steps_per_day
         cfg.include_grid = True
-        cfg.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
         for year in range(years):
             env = energym.make(cfg.env_name, weather=cfg.weather, simulation_days=cfg.days)
-            agent = ERODE(cfg=cfg, env=env)
+            agent = ERODE(cfg=cfg, env=env, device=device)
 
-
-            print('### RUNNING MODEL-BASED SCRIPT ###')
             learn_iters = 0
             daily_scores = []
             emissions = []
@@ -66,7 +64,7 @@ if __name__ == '__main__':
                 action_dict, model_input, obs = agent.plan(observation, env, prev_action)
                 obs_next = env.step(action_dict)
                 if agent.cfg.include_grid:
-                    observation_ = agent.add_c02(obs_next)
+                    obs_next = agent.add_c02(obs_next)
                 reward = agent.calculate_reward(obs_next)
                 score += reward
                 agent.n_steps += 1
@@ -77,22 +75,28 @@ if __name__ == '__main__':
                                        reward=reward
                                        )
                 emissions.append(
-                    obs_next[agent.cfg.energy_reward_key] * (cfg.mins_per_step / 60) / 1000
-                    * (obs_next[agent.cfg.c02_reward_key] / 1000)
+                    obs_next[agent.cfg.energy_reward] * (cfg.mins_per_step / 60) / 1000
+                    * (obs_next[agent.cfg.c02_reward] / 1000)
                 )
                 temps.append(obs_next['Z02_T'])
 
                 min, hour, day, month = env.get_date()
 
+                wandb.log({'train/zone2-sp': action_dict['Z02_T_Thermostat_sp'][0],
+                            'train/hp-T1-sp': action_dict['Bd_T_AHU1_sp'][0],
+                            'train/hp-fr1-sp': action_dict['Bd_Fl_AHU1_sp'][0],
+                            'train/hp-T2-sp': action_dict['Bd_T_AHU2_sp'][0],
+                            'train/hp-fr2-sp': action_dict['Bd_Fl_AHU2_sp'][0]})
+
                 # exploration phase update
                 if (agent.n_steps < steps_per_day) and (agent.n_steps
                                                         % (agent.cfg.batch_size + agent.cfg.hist_length) == 0):
-                    agent.learn()
+                    model_loss, policy_loss, value_loss = agent.learn()
                     learn_iters += 1
 
                 # normal update
                 if agent.n_steps % cfg.steps_per_day == 0:
-                    agent.learn()
+                    model_loss, pi_loss, value_loss = agent.learn()
                     agent.save_models()
                     learn_iters += 1
 
@@ -104,13 +108,17 @@ if __name__ == '__main__':
                           'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
                           'learning steps', learn_iters)
 
-                    wandb.log({'mean_reward': avg_score})
-                    wandb.log({'av_zone_temp': np.mean(temps[-steps_per_day:])})
-                    wandb.log({'cum_emissions': sum(emissions)})
+                    wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
+                                'train/emissions': sum(emissions),
+                                'train/reward:': score,
+                                'train/model_loss': model_loss,
+                               'train/policy_loss': policy_loss,
+                               'train/value_loss': value_loss,
+                           })
 
                     score = 0
 
-                observation = observation_
+                observation = obs_next
                 prev_action = action_dict
 
             env.close()

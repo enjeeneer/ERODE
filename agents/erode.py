@@ -10,28 +10,29 @@ from .base import Base
 
 
 class Agent(Base):
-    def __init__(self, cfg, env):
+    def __init__(self, cfg, env, device):
 
         # GENERAL PARAMS
         self.cfg = cfg
         self.env = env
+        self.device = device
         self.obs_dim = len(self.normaliser.obs_space)
         self.act_dim = len(self.normaliser.act_space)
         self.obs_act_dim = self.obs_dim + self.cfg.time_dim + self.act_dim
         self.n_steps = 0
         self.model_path = os.path.join(cfg.models_dir, 'model.pth')
         self.exploration_steps = self.cfg.exploration_mins / self.cfg.mins_per_step
-        self.normaliser = Normalize(self.env, cfg=self.cfg)
+        self.normaliser = Normalize(self.env, cfg=self.cfg, device=device)
 
         # COMPONENTS
         self.memory = ErodeMemory(cfg=self.cfg, obs_dim=self.obs_dim + self.cfg.time_dim,
                                   act_dim=self.act_dim, net_inp_dims=self.obs_act_dim)
-        self.Q1, self.Q2 = Q(cfg, self.act_dim), Q(cfg, self.act_dim)
-        self.Q1_target, self.Q2_target = Q(cfg, self.act_dim), Q(cfg, self.act_dim)
+        self.Q1, self.Q2 = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
+        self.Q1_target, self.Q2_target = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
         self.pi = MLP(output_dims=self.act_dim, input_dims=cfg.latent_dim,
-                                       chkpt_path=self.cfg.models_dir)
-        self.model = LatentODE(cfg, obs_act_dim=self.obs_act_dim, obs_dim=self.obs_dim)
-        self.model.to(cfg.device)
+                                       chkpt_path=self.cfg.models_dir, device=device)
+        self.model = LatentODE(cfg, obs_act_dim=self.obs_act_dim, obs_dim=self.obs_dim, device=device)
+        self.model.to(device)
         self.optimiser = torch.optim.Adamax(self.model.parameters(), lr=cfg.alpha)
         self.kl_cnt = 0
         self.kl_coef = 1
@@ -115,7 +116,7 @@ class Agent(Base):
                                    self.obs_act_dim)
 
             # predict
-            model_input = torch.tensor(input, dtype=torch.float).to(self.cfg.device)
+            model_input = torch.tensor(input, dtype=torch.float).to(self.device)
             pred_states = self.model.predict_next_state(history=model_input, train=False)
             assert pred_states.shape == (self.cfg.particles, self.cfg.popsize, self.cfg.state_dim)
 
@@ -165,11 +166,11 @@ class Agent(Base):
                 dist = TruncatedNormal(loc=mean, scale=var, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
                 stoch_acts = dist.sample(
                     sample_shape=[stoch_samples, ])  # output popsize x horizon x action_dims matrix
-                stoch_acts = torch.where(stoch_acts < torch.tensor([-1.0], device=self.cfg.device),
-                                         torch.tensor([-1.0], device=self.cfg.device),
+                stoch_acts = torch.where(stoch_acts < torch.tensor([-1.0], device=self.device),
+                                         torch.tensor([-1.0], device=self.device),
                                          stoch_acts)  # clip
-                stoch_acts = torch.where(stoch_acts > torch.tensor([1.0], device=self.cfg.device),
-                                         torch.tensor([1.0], device=self.cfg.device),
+                stoch_acts = torch.where(stoch_acts > torch.tensor([1.0], device=self.device),
+                                         torch.tensor([1.0], device=self.device),
                                          stoch_acts)  # clip
 
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
@@ -216,17 +217,17 @@ class Agent(Base):
             if epoch % 5 == 0:
                 print('learning epoch:', epoch)
 
-            # latent ode training
+            # model training
             self.kl_coef = 1 - 0.99 ** self.kl_cnt
             self.kl_cnt += 1
             for i in range(inp_model.shape[0]):
-                input_batch = torch.tensor(inp_model[i, :, :], dtype=torch.float).to(self.cfg.device)
-                obs_batch = torch.tensor(obs_model[i, :, :], dtype=torch.float).to(self.cfg.device)
+                input_batch = torch.tensor(inp_model[i, :, :], dtype=torch.float).to(self.device)
+                obs_batch = torch.tensor(obs_model[i, :, :], dtype=torch.float).to(self.device)
 
                 pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch)
-                loss = self.model.loss(pred_state_mean, obs_batch, z_dists, self.kl_coef)
+                model_loss = self.model.loss(pred_state_mean, obs_batch, z_dists, self.kl_coef)
                 self.optimiser.zero_grad()
-                loss.backward()
+                model_loss.backward()
                 self.optimiser.step()
 
             # policy training
@@ -255,7 +256,7 @@ class Agent(Base):
 
         self.memory.clear_memory()
 
-        return pi_loss, value_loss
+        return model_loss, pi_loss, value_loss
 
     def td_target(self, z_, reward):
         """
@@ -291,10 +292,10 @@ class Agent(Base):
             dist = TruncatedNormal(loc=mu, scale=std, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
             act = dist.sample()
             # ensure actions in range [-1,1]
-            act = torch.where(act < torch.tensor([-1.0], device=self.cfg.device),
-                              torch.tensor([-1.0], device=self.cfg.device), act)
-            act = torch.where(act > torch.tensor([1.0], device=self.cfg.device),
-                              torch.tensor([1.0], device=self.cfg.device), act)
+            act = torch.where(act < torch.tensor([-1.0], device=self.device),
+                              torch.tensor([-1.0], device=self.device), act)
+            act = torch.where(act > torch.tensor([1.0], device=self.device),
+                              torch.tensor([1.0], device=self.device), act)
 
             return act
 

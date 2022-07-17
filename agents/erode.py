@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn.functional as F
 import numpy as np
-from components.networks import LatentODE, DeterministicNetwork, Q
+from components.networks import LatentODE, MLP, Q
 from components.memory import ErodeMemory
 from utils.utils import Normalize
 from utils.torch_truncnorm import TruncatedNormal
@@ -28,7 +28,7 @@ class Agent(Base):
                                   act_dim=self.act_dim, net_inp_dims=self.obs_act_dim)
         self.Q1, self.Q2 = Q(cfg, self.act_dim), Q(cfg, self.act_dim)
         self.Q1_target, self.Q2_target = Q(cfg, self.act_dim), Q(cfg, self.act_dim)
-        self.pi = DeterministicNetwork(output_dims=self.act_dim, input_dims=cfg.latent_dim,
+        self.pi = MLP(output_dims=self.act_dim, input_dims=cfg.latent_dim,
                                        chkpt_path=self.cfg.models_dir)
         self.model = LatentODE(cfg, obs_act_dim=self.obs_act_dim, obs_dim=self.obs_dim)
         self.model.to(cfg.device)

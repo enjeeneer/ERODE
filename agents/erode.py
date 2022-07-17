@@ -232,15 +232,11 @@ class Agent(Base):
             # policy training
             with torch.no_grad():
                 zs = self.model.get_z0(inp_trajs)  # [traj_batches, horizon, 1]
-
-            self.update_pi(zs)
-            ### NEED TO UPDATE THIS SO THAT I PASS CORRECT PART OF TENSOR
-
-            zs = zs.detach()
+            pi_loss = self.update_pi(zs)
 
             # value function training
             value_loss = 0
-
+            zs = zs.detach()
             for t in range(self.cfg.horizon):
                 self.Q1.optimizer.zero_grad()
                 self.Q2.optimizer.zero_grad()
@@ -258,6 +254,8 @@ class Agent(Base):
             self.Q2.optimizer.step()
 
         self.memory.clear_memory()
+
+        return pi_loss, value_loss
 
     def td_target(self, z_, reward):
         """
@@ -320,6 +318,8 @@ class Agent(Base):
         pi_loss.backward()
         self.pi.optimizer.step()
         self.track_q_grad(True)
+
+        return pi_loss
 
     @torch.no_grad()
     def estimate_value(self, trajs, actions):

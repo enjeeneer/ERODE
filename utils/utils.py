@@ -8,10 +8,9 @@ import torch as T
 
 
 class Normalize:
-    def __init__(self, env, agent, config, steps_per_day, include_grid=False):
+    def __init__(self, env, cfg):
         self.env = env
-        self.agent = agent
-        self.config = config
+        self.cfg = cfg
         self.include_grid = include_grid
         self.red_obs = self.config.redundant_observations
         self.red_act = self.config.redundant_actions

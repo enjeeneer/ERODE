@@ -8,9 +8,9 @@ class Base:
     General parent class that defines common model-based agent methods
     '''
 
-    def __init__(self, env, normaliser, memory, cfg, act_dim, obs_space, n_steps):
+    def __init__(self, env, normaliser, memory, cfg, act_dim, obs_space, n_steps, expl_deltas):
         self.env, self.normaliser, self.memory, self.cfg = env, normaliser, memory, cfg
-        self.act_dim, self.obs_space, self.n_steps = act_dim, obs_space, n_steps
+        self.act_dim, self.obs_space, self.n_steps, self.expl_deltas = act_dim, obs_space, n_steps, expl_deltas
 
         if 'c02_path' in cfg.keys():
             self.c02_data = pd.read_pickle(cfg.c02_path)
@@ -33,20 +33,20 @@ class Base:
         '''
 
         temp_reward = 0
-        for t in self.temp_reward:
+        for t in self.cfg.temp_reward:
             temp = state_dict[t]
-            if (self.lower_t <= temp) and (temp <= self.upper_t):
+            if (self.cfg.low_temp_goal <= temp) and (temp <= self.cfg.high_temp_goal):
                 pass
             else:
-                temp_reward -= self.theta * min((self.lower_t - temp) ** 2, (self.upper_t - temp) ** 2)
+                temp_reward -= self.cfg.theta * min((self.cfg.low_temp_goal - temp) ** 2, (self.cfg.high_temp_goal - temp) ** 2)
 
-        if self.include_grid:
-            c02 = state_dict[self.c02_reward_key]  # gCO2/kWh
-            energy_kwh = (state_dict[self.energy_reward_key] * (self.minutes_per_step / 60)) / 1000  # kWh
-            c02_reward = -(self.phi * c02 * energy_kwh)  # gC02
+        if self.cfg.include_grid:
+            c02 = state_dict[self.cfg.c02_reward]  # gCO2/kWh
+            energy_kwh = (state_dict[self.cfg.energy_reward] * (self.cfg.mins_per_step / 60)) / 1000  # kWh
+            c02_reward = -(c02 * energy_kwh)  # gC02
             reward = c02_reward + temp_reward
         else:
-            energy_reward = -(self.beta * state_dict[self.energy_reward_key])
+            energy_reward = -(state_dict[self.cfg.energy_reward])
             reward = energy_reward + temp_reward
 
         # normalise
@@ -71,8 +71,8 @@ class Base:
             old_action_dict = prev_action.copy()
             new_action_dict = {}
             for key, _ in old_action_dict.items():
-                if key in self.cont_actions:
-                    delta_cont = np.random.uniform(-self.deltas[key], self.deltas[key])
+                if key in self.cfg.cont_actions:
+                    delta_cont = np.random.uniform(-self.expl_deltas[key], self.expl_deltas[key])
                     candidate_action = old_action_dict[key][0] + delta_cont
                     # equation 3.3 in FYR
                     action = np.maximum(self.normaliser.action_lower_bound[key],

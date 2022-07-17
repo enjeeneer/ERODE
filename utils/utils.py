@@ -11,36 +11,24 @@ class Normalize:
     def __init__(self, env, cfg):
         self.env = env
         self.cfg = cfg
-        self.include_grid = include_grid
-        self.red_obs = self.config.redundant_observations
-        self.red_act = self.config.redundant_actions
-        self.cont_actions = self.config.continuous_actions
-        self.discrete_actions = self.config.discrete_actions
-        self.act_space = [key for key in env.get_inputs_names() if key not in self.red_act]
-        self.obs_space = [key for key in env.get_outputs_names() if key not in self.red_obs]
-        self.steps_per_day = steps_per_day
-        self.reward_low = self.config.reward_low
-        self.reward_high = self.config.reward_high
-        self.reward_low_T = T.tensor(self.reward_low, dtype=T.float)
-        self.reward_high_T = T.tensor(self.reward_high, dtype=T.float)
-        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.act_space = [key for key in env.get_inputs_names() if key not in cfg.red_act]
+        self.obs_space = [key for key in env.get_outputs_names() if key not in cfg.red_obs]
 
         ### OUTPUT SPACE BOUNDS ###
         upper_bound = {}
         lower_bound = {}
 
-        default_upper = {key: self.env.output_space[key].high[0] for key in self.obs_space}
-        default_lower = {key: self.env.output_space[key].low[0] for key in self.obs_space}
+        default_upper = {key: env.output_space[key].high[0] for key in self.obs_space}
+        default_lower = {key: env.output_space[key].low[0] for key in self.obs_space}
 
         self.output_lower_bound = {**lower_bound, **default_lower}
         self.output_upper_bound = {**upper_bound, **default_upper}
 
         # add c02 if not already in energym environment
-        if include_grid and 'Grid_CO2' not in self.obs_space:
+        if cfg.include_grid and 'Grid_CO2' not in self.obs_space:
             self.obs_space.append('c02')
-            self.c02_data = self.config.c02_data
-            self.output_lower_bound['c02'] = self.config.c02_low
-            self.output_upper_bound['c02'] = self.config.c02_high
+            self.output_lower_bound['c02'] = self.cfg.cO2_low
+            self.output_upper_bound['c02'] = self.cfg.cO2_high
 
         output_lower_bound_T = []
         output_upper_bound_T = []
@@ -65,12 +53,6 @@ class Normalize:
         default_upper = {key: self.env.input_space[key].high[0] for key in cont_keys}
         default_lower = {key: self.env.input_space[key].low[0] for key in cont_keys}
 
-        # # add discrete action bounds
-        # if len(self.discrete_actions) > 0:
-        #     for key in self.discrete_actions:
-        #         default_lower[key] = 0
-        #         default_upper[key] = 1
-
         self.action_lower_bound = {**lower_bound, **default_lower}
         self.action_upper_bound = {**upper_bound, **default_upper}
 
@@ -87,8 +69,8 @@ class Normalize:
         # get output keys
         output_cp = deepcopy(outputs)
         # drop redundant features
-        if len(self.red_obs) > 0:
-            for key in self.red_obs:
+        if len(self.cfg.red_obs) > 0:
+            for key in self.cfg.red_obs:
                 if key in output_cp:
                     del output_cp[key]
 
@@ -101,15 +83,15 @@ class Normalize:
 
         # add time and date features
         min, hour, day, month = env.get_date()
-        time = hour * (self.steps_per_day / 24) + (
-                    min / ((60 * 24) / self.steps_per_day))  # timesteps elasped on this day
+        time = hour * (self.cfg.steps_per_day / 24) + (
+                    min / ((60 * 24) / self.cfg.steps_per_day))  # timesteps elasped on this day
         date_delta = datetime.date(2017, month, day) - datetime.date(2017, 1, 1)
         days = date_delta.days
 
         if not for_memory:  # we don't store time in memory because we don't predict it with models
             # transform time to sit on two dimensional (circular) sin/cos space
-            output_cp['sin_time'] = np.sin(2 * np.pi * (time / self.steps_per_day))
-            output_cp['cos_time'] = np.cos(2 * np.pi * (time / self.steps_per_day))
+            output_cp['sin_time'] = np.sin(2 * np.pi * (time / self.cfg.steps_per_day))
+            output_cp['cos_time'] = np.cos(2 * np.pi * (time / self.cfg.steps_per_day))
 
             # transform date to sit on two dimensional (circular) sin/cos space
             output_cp['sin_date'] = np.sin(2 * np.pi * (days / 365))
@@ -145,7 +127,7 @@ class Normalize:
             actions_dict[key] = actions_cp[i]
 
         # un-normalise values
-        for key in self.cont_actions:
+        for key in self.cfg.cont_actions:
             revert = ((actions_dict[key] + 1) / 2) * (self.action_upper_bound[key] - self.action_lower_bound[key]) \
                      + self.action_lower_bound[key]
 
@@ -154,13 +136,13 @@ class Normalize:
                                          a_max=self.action_upper_bound[key])]
 
         # add dummy variables for redundant actions
-        if len(self.red_act) > 0:
-            for key in self.red_act:
+        if len(self.cfg.red_act) > 0:
+            for key in self.cfg.red_act:
                 actions_dict[key] = [float(0)]
 
         # manually interpret discrete elements of action array
-        if len(self.discrete_actions) > 0:
-            for key in self.discrete_actions:
+        if len(self.cfg.discrete_actions) > 0:
+            for key in self.cfg.discrete_actions:
                 if actions_dict[key] <= 0:
                     actions_dict[key] = [0]
                 else:
@@ -177,13 +159,13 @@ class Normalize:
         working_dict = deepcopy(action_dict)
 
         # normalise continuous actions
-        for key in self.cont_actions:
+        for key in self.cfg.cont_actions:
             working_dict[key][0] = 2 * (working_dict[key][0] - self.action_lower_bound[key]) / (
                     self.action_upper_bound[key] - self.action_lower_bound[key]) - 1
 
         # drop redundant actions
-        if len(self.red_act) > 0:
-            for key in self.red_act:
+        if len(self.cfg.red_act) > 0:
+            for key in self.cfg.red_act:
                 working_dict.pop(key)
 
         actions = np.array(list(working_dict.values()), dtype=float).reshape(len(working_dict.values()), )
@@ -202,46 +184,34 @@ class Normalize:
         '''
 
         init_dtime = datetime.datetime(2017, init_date[1], init_date[0], init_time[1], init_time[0])
-        step_dtime = init_dtime + datetime.timedelta(minutes=(24 * 60 / self.steps_per_day) * (TS_step + 1))
+        step_dtime = init_dtime + datetime.timedelta(minutes=(24 * 60 / self.cfg.steps_per_day) * (TS_step + 1))
 
         # no. of timesteps elapsed in day and days elapsed in year
-        time = step_dtime.hour * (self.steps_per_day / 24) + (
-                    step_dtime.minute / ((60 * 24) / self.steps_per_day))  # timesteps elasped on this day
+        time = step_dtime.hour * (self.cfg.steps_per_day / 24) + (
+                    step_dtime.minute / ((60 * 24) / self.cfg.steps_per_day))  # timesteps elasped on this day
         date_delta = datetime.date(2017, step_dtime.month, step_dtime.day) - datetime.date(2017, 1, 1)
         days = date_delta.days
 
         # transform time to sit on two dimensional (circular) sin/cos space
-        sin_time = np.sin(2 * np.pi * (time / self.steps_per_day))
-        cos_time = np.cos(2 * np.pi * (time / self.steps_per_day))
+        sin_time = np.sin(2 * np.pi * (time / self.cfg.steps_per_day))
+        cos_time = np.cos(2 * np.pi * (time / self.cfg.steps_per_day))
 
         # transform date to sit on two dimensional (circular) sin/cos space
         sin_date = np.sin(2 * np.pi * (days / 365))
         cos_date = np.cos(2 * np.pi * (days / 365))
 
         # concat to tensor
-        if self.agent == 'pets' or self.agent == 'erode':
+        if self.cfg.name == 'pets' or self.cfg.name == 'erode':
             time_tensor = T.tile(T.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
-                                 [state_tensor.shape[0], state_tensor.shape[1], 1]).to(self.device)
+                                 [state_tensor.shape[0], state_tensor.shape[1], 1]).to(self.cfg.device)
 
-        elif self.agent == 'mpc':
+        elif self.cfg.name == 'mpc':
             time_tensor = T.tile(T.tensor([sin_time, cos_time, sin_date, cos_date], dtype=float, requires_grad=False),
                                  #
-                                 [state_tensor.shape[0], 1]).to(self.device)
+                                 [state_tensor.shape[0], 1]).to(self.cfg.device)
 
         return T.cat((state_tensor, time_tensor), dim=-1)
-
-    def rewards(self, reward):
-        '''
-        Takes vector of rewards from planned action sequences and scales in region [-1, 0]
-        :param reward: array of rewards of shape (popsize
-        '''
-        if T.is_tensor(reward):
-            norm = ((reward - self.reward_low_T) / (self.reward_high_T - self.reward_low_T)) * (0 - (-1)) + (-1)
-        else:
-            norm = ((reward - self.reward_low) / (self.reward_high - self.reward_low)) * (0 - (-1)) + (-1)
-
-        return norm
 
 
 

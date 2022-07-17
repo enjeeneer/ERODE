@@ -1,16 +1,19 @@
 import copy
 import datetime
 import numpy as np
-
+import pandas as pd
 
 class Base:
     '''
     General parent class that defines common model-based agent methods
     '''
 
-    def __init__(self, env, normaliser, memory, config, act_dim, obs_space, n_steps):
-        self.env, self.normaliser, self.memory, self.config = env, normaliser, memory, config
+    def __init__(self, env, normaliser, memory, cfg, act_dim, obs_space, n_steps):
+        self.env, self.normaliser, self.memory, self.cfg = env, normaliser, memory, cfg
         self.act_dim, self.obs_space, self.n_steps = act_dim, obs_space, n_steps
+
+        if 'c02_path' in cfg.keys():
+            self.c02_data = pd.read_pickle(cfg.c02_path)
 
     def remember(self, observation, model_input):
         '''
@@ -98,10 +101,9 @@ class Base:
         obs = copy.deepcopy(observation_)
         min, hour, day, month = self.env.get_date()
 
-        dt = datetime.datetime(self.config.c02_year, month, day, hour, min)
+        dt = datetime.datetime(self.cfg.c02_year, month, day, hour, min)
         # index c02 data from dataframe using datetime of simulation
-        c02 = \
-         self.config.c02_data[self.config.c02_carbon_col][self.config.c02_data[self.config.c02_dt_col] == dt].values[0]
+        c02 = self.c02_data['carbon_intensity_avg'][self.c02_data['datetime'] == dt].values[0]
         obs['c02'] = c02
 
         return obs

@@ -43,6 +43,7 @@ MixedUse:
 
     energy_reward: 'Fa_Pw_All'  # total power consumption
     c02_reward: 'c02'
+    c02_path: 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
     weather: "GRC_A_Athens"
     mins_per_step: 15
     steps_per_day: 96
@@ -101,6 +102,7 @@ Offices:
 
     energy_reward: 'Fa_Pw_All'  # total power consumption
     c02_reward: 'c02'
+    c02_path: 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
     weather: "GRC_A_Athens"
     mins_per_step: 15
     steps_per_day: 96

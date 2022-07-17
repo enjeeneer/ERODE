@@ -2,7 +2,7 @@ import os
 import numpy as np
 import torch as T
 from utils.utils import Normalize
-import config.env_configs as env_configs
+import configs.envs as env_configs
 from components.networks import ProbabilisticNetwork
 from components.memory import ModelBasedMemory
 from components.optimizers import CEM

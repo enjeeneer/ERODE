@@ -63,7 +63,7 @@ class Agent(Base):
         self.disc_tensor = torch.tile(self.disc_vector, dims=(self.cfg.particles, self.cfg.popsize, 1))
 
         super(Agent, self).__init__(self.env, self.normaliser, self.memory, self.cfg, self.act_dim, self.obs_space,
-                                    self.n_steps)
+                                    self.n_steps, self.expl_deltas)
 
     @torch.no_grad()
     def traj_sampler(self, init_state, stoch_acts):

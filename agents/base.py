@@ -49,9 +49,6 @@ class Base:
             energy_reward = -(state_dict[self.cfg.energy_reward])
             reward = energy_reward + temp_reward
 
-        # normalise
-        reward = self.normaliser.rewards(reward)
-
         return reward
 
     def explore(self, prev_action):

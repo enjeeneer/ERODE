@@ -36,6 +36,10 @@ class Agent(Base):
         self.optimiser = torch.optim.Adamax(self.model.parameters(), lr=cfg.alpha)
         self.kl_cnt = 0
         self.kl_coef = 1
+        self.cem_init_mean = torch.zeros(size=(cfg.horizon, self.act_dim), dtype=torch.float, requires_grad=False).to(
+            self.device)
+        self.cem_init_var = torch.tile(torch.tensor(cfg.init_var, requires_grad=False),
+                                   (cfg.horizon, self.act_dim)).to(self.device)
 
         # REWARD PARAMS
         temp_idx = []
@@ -158,7 +162,7 @@ class Agent(Base):
 
             # CEM
             print('...planning...')
-            mean, var, t = self.cfg.init_mean, self.cfg.init_var, 0
+            mean, var, t = self.init_mean, self.init_var, 0
             # cem optimisation loop
             while (t < self.cfg.max_iters) and (torch.max(var) > self.cfg.epsilon):
                 # sample stochastic actions

@@ -12,6 +12,8 @@ high_temp_goal: 24
 theta: 1000
 exploration_mins: 180
 
+# cem params
+init_var: 0.25
 
 # ode-rnn params
 hist_length: 3

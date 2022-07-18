@@ -3,7 +3,7 @@ import numpy as np
 class ErodeMemory:
     def __init__(self, cfg, obs_dim, act_dim, net_inp_dims):
         self.mem_size = cfg.steps_per_day
-        self.model_inputs = np.zeros(shape=(self.mem_size, net_inp_dims))
+        self.model_inputs = np.zeros(shape=(self.mem_size, cfg.hist_length + 1, net_inp_dims))
         self.actions = np.zeros(shape=(self.mem_size, act_dim))
         self.obs_ = np.zeros(shape=(self.mem_size, obs_dim))
         self.rewards = np.zeros(shape=(self.mem_size, 1))

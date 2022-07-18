@@ -43,8 +43,8 @@ class Agent(Base):
             idx = self.normaliser.obs_space.index(temp)
             temp_idx.append(idx)
         self.temp_idx = temp_idx
-        self.energy_idx = self.normaliser.obs_space.index(self.cfg.energy_reward_key)
-        self.c02_idx = self.normaliser.obs_space.index(self.cfg.c02_reward_key)
+        self.energy_idx = self.normaliser.obs_space.index(self.cfg.energy_reward)
+        self.c02_idx = self.normaliser.obs_space.index(self.cfg.c02_reward)
 
         # EXPLORATION PARAMS
         lower = self.normaliser.action_lower_bound

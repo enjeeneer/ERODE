@@ -25,8 +25,8 @@ class Normalize:
         # add c02 if not already in energym environment
         if cfg.include_grid and 'Grid_CO2' not in self.obs_space:
             self.obs_space.append('c02')
-            self.output_lower_bound['c02'] = self.cfg.cO2_low
-            self.output_upper_bound['c02'] = self.cfg.cO2_high
+            self.output_lower_bound['c02'] = self.cfg.c02_low
+            self.output_upper_bound['c02'] = self.cfg.c02_high
 
         output_lower_bound_T = []
         output_upper_bound_T = []

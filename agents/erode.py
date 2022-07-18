@@ -111,7 +111,7 @@ class Agent(Base):
                 pi_actions = self.sample_pi(z)  # [particles, pi_actions, act_dim]
 
                 # update pi_act memory to give back to CEM
-                pi_acts[:, :, i, :] = pi_actions
+                pi_acts[:, :, i, :] = pi_actions.cpu().detach().numpy()
                 actions = np.concatenate((stoch_actions, pi_actions), axis=1)  # [particles, popsize, act_dim]
 
             else:

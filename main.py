@@ -71,7 +71,6 @@ if __name__ == '__main__':
                 if agent.n_steps > agent.cfg.hist_length:
                     agent.memory.store(model_input=model_input,
                                        obs=obs,
-                                       obs_next=obs_next,
                                        reward=reward
                                        )
                 emissions.append(

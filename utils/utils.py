@@ -157,7 +157,7 @@ class Normalize:
         working_dict = deepcopy(action_dict)
 
         # normalise continuous actions
-        for key in self.cfg.continous_actions:
+        for key in self.cfg.continuous_actions:
             working_dict[key][0] = 2 * (working_dict[key][0] - self.action_lower_bound[key]) / (
                     self.action_upper_bound[key] - self.action_lower_bound[key]) - 1
 

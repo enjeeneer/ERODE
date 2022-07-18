@@ -106,8 +106,8 @@ class Agent(Base):
 
             if pi:
                 # sample some actions from policy
-                z = self.model.get_z0(hist[:, -math.ceil(self.cfg.popsize * self.cfg.mix_coeff):, :, :],
-                                      plan=True)  # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
+                histories = torch.tensor(hist[:, -math.ceil(self.cfg.popsize * self.cfg.mix_coeff):, :, :], dtype=torch.float).to(self.device)
+                z = self.model.get_z0(histories, plan=True)  # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
                 pi_actions = self.pi.sample_pi(z)  # [particles, pi_actions, act_dim]
 
                 # update pi_act memory to give back to CEM

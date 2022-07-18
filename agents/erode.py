@@ -162,7 +162,7 @@ class Agent(Base):
 
             # CEM
             print('...planning...')
-            mean, var, t = self.init_mean, self.init_var, 0
+            mean, var, t = self.cem_init_mean, self.cem_init_var, 0
             # cem optimisation loop
             while (t < self.cfg.max_iters) and (torch.max(var) > self.cfg.epsilon):
                 # sample stochastic actions

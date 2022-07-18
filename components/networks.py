@@ -124,8 +124,9 @@ class GRU(nn.Module):
     Follows algo 1 from Rubanova et al. (2019).
     '''
 
-    def __init__(self, cfg, obs_act_dim):
+    def __init__(self, cfg, device, obs_act_dim):
         self.cfg = cfg
+        self.device = device
         super(GRU, self).__init__()
         self.update_gate = nn.Sequential(
             nn.Linear(cfg.latent_dim * 2 + obs_act_dim, cfg.GRU_unit),
@@ -179,7 +180,7 @@ class OdeRNN(nn.Module):
         self.device = device
         self.obs_act_dim = obs_act_dim
         self.ode_func = HistoryODE(cfg)
-        self.gru = GRU(cfg, obs_act_dim)
+        self.gru = GRU(cfg, obs_act_dim, device)
 
     def forward(self, history, train=True):
         '''

@@ -112,7 +112,7 @@ class Agent(Base):
 
                 # update pi_act memory to give back to CEM
                 pi_acts[:, :, i, :] = pi_actions.cpu().detach().numpy()
-                actions = np.concatenate((stoch_actions, pi_actions), axis=1)  # [particles, popsize, act_dim]
+                actions = np.concatenate((stoch_actions, pi_actions.cpu().detach().numpy()), axis=1)  # [particles, popsize, act_dim]
 
             else:
                 actions = stoch_actions

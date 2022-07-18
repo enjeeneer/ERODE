@@ -53,9 +53,9 @@ class Q(nn.Module):
     A Q-function with layer normalisation
     """
     def __init__(self, cfg, act_dim, device):
-        super(Q).__init__()
+        super(Q, self).__init__()
 
-        self.model =  nn.Sequential(
+        self.model = nn.Sequential(
             nn.Linear(cfg.latent_dim+act_dim, cfg.q_dim),
             nn.LayerNorm(cfg.q_dim),
             nn.Tanh(),

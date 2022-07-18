@@ -124,7 +124,7 @@ class GRU(nn.Module):
     Follows algo 1 from Rubanova et al. (2019).
     '''
 
-    def __init__(self, cfg, device, obs_act_dim):
+    def __init__(self, cfg, obs_act_dim, device):
         self.cfg = cfg
         self.device = device
         super(GRU, self).__init__()

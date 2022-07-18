@@ -390,7 +390,7 @@ class Agent(Base):
         total_disc = total * self.disc_tensor
         rewards = torch.sum(total_disc, dim=2)  # [particles, popsize]
         if self.pi:
-            rewards = rewards + torch.squeeze(term_vals)
+            rewards = rewards + torch.squeeze(term_vals).to(self.device)
 
         exp_rewards = torch.mean(rewards, dim=0)  # [popsize]
 

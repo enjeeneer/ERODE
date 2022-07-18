@@ -70,6 +70,10 @@ class Q(nn.Module):
         self.device = device
         self.to(self.device)
 
+    def forward(self, latent_state_action):
+
+        return self.model(latent_state_action)
+
 ### LATENT ODE NETWORKS ###
 class ForwardODE(nn.Module):
     """

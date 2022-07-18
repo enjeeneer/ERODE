@@ -82,11 +82,11 @@ if __name__ == '__main__':
 
                 min, hour, day, month = env.get_date()
 
-                wandb.log({'train/zone2-sp': action_dict['Z02_T_Thermostat_sp'][0],
-                            'train/hp-T1-sp': action_dict['Bd_T_AHU1_sp'][0],
-                            'train/hp-fr1-sp': action_dict['Bd_Fl_AHU1_sp'][0],
-                            'train/hp-T2-sp': action_dict['Bd_T_AHU2_sp'][0],
-                            'train/hp-fr2-sp': action_dict['Bd_Fl_AHU2_sp'][0]})
+                # wandb.log({'train/zone2-sp': action_dict['Z02_T_Thermostat_sp'][0],
+                #             'train/hp-T1-sp': action_dict['Bd_T_AHU1_sp'][0],
+                #             'train/hp-fr1-sp': action_dict['Bd_Fl_AHU1_sp'][0],
+                #             'train/hp-T2-sp': action_dict['Bd_T_AHU2_sp'][0],
+                #             'train/hp-fr2-sp': action_dict['Bd_Fl_AHU2_sp'][0]})
 
                 # exploration phase update
                 if (agent.n_steps < steps_per_day) and (agent.n_steps
@@ -107,14 +107,14 @@ if __name__ == '__main__':
                     print('date:', day, '/', month, '--',
                           'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
                           'learning steps', learn_iters)
-
-                    wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
-                                'train/emissions': sum(emissions),
-                                'train/reward:': score,
-                                'train/model_loss': model_loss,
-                               'train/policy_loss': policy_loss,
-                               'train/value_loss': value_loss,
-                           })
+                    #
+                    # wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
+                    #             'train/emissions': sum(emissions),
+                    #             'train/reward:': score,
+                    #             'train/model_loss': model_loss,
+                    #            'train/policy_loss': policy_loss,
+                    #            'train/value_loss': value_loss,
+                    #        })
 
                     score = 0
 

@@ -366,7 +366,7 @@ class Agent(Base):
             term_trajs = torch.cat([term_actions, term_states],
                                dim=3).to(self.device)  # [particles, popsize, hist_length + 1, state_act_dim]
             term_vals = self.terminal_value(term_trajs)  # [particles, popsize]
-            assert term_vals.shape == (self.cfg.particles, self.cfg.popsize)
+            assert term_vals.shape == (self.cfg.particles, self.cfg.popsize, 1)
 
         # unnormalise
         trajs_revert = self.normaliser.model_predictions_to_tensor(trajs)

@@ -183,7 +183,7 @@ class Agent(Base):
 
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
 
-                exp_rewards = self.estimate_value(trajs)  # returns pi_actions appended to CEM actions
+                exp_rewards = self.estimate_value(trajs, combined_acts)  # returns pi_actions appended to CEM actions
                 elites = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
 
                 new_mean = torch.mean(elites, axis=0)
@@ -361,10 +361,10 @@ class Agent(Base):
         # only calculate terminal value if we are using actions sampled from policy
         if self.pi:
             # terminal value
-            term_states = trajs[:, :, -(self.cfg.hist_length + 1):, :]  # [particles, popsize, hist_length + 1, state_dim]
-            term_actions = actions[:, :, -(self.cfg.hist_length + 1):, :]  # [particles, popsize, hist_length + 1, act_dim]
+            term_states = torch.tensor(trajs[:, :, -(self.cfg.hist_length + 1):, :]).to(self.device)  # [particles, popsize, hist_length + 1, state_dim]
+            term_actions = torch.tensor(actions[:, :, -(self.cfg.hist_length + 1):, :]).to(self.device)  # [particles, popsize, hist_length + 1, act_dim]
             term_trajs = torch.cat([term_actions, term_states],
-                               dim=3)  # [particles, popsize, hist_length + 1, state_act_dim]
+                               dim=3).to(self.device)  # [particles, popsize, hist_length + 1, state_act_dim]
             term_vals = self.terminal_value(term_trajs)  # [particles, popsize]
             assert term_vals.shape == (self.cfg.particles, self.cfg.popsize)
 

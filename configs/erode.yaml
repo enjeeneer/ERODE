@@ -15,6 +15,9 @@ exploration_mins: 180
 # cem params
 init_var: 0.25
 max_iters: 5
+epsilon: 0.001
+elites: 0.1
+kappa: 0.1
 
 # ode-rnn params
 hist_length: 3

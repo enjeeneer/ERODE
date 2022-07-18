@@ -88,15 +88,14 @@ class Agent(Base):
 
         # initialise trajectory and pi_action arrays
         trajs = np.zeros(
-            shape=(self.cfg.particles, math.floor(self.cfg.popsize * (1 - self.cfg.mix_coeff)), self.cfg.horizon,
-                   self.obs_dim + self.cfg.time_dim))
+            shape=(self.cfg.particles, self.cfg.popsize, self.cfg.horizon, self.obs_dim + self.cfg.time_dim))
+
         if pi:
-            pi_acts = np.zeros(shape=(self.cfg.particles, math.ceil(self.cfg.popsize * self.cfg.mix_coeff), self.cfg.horizon,
+            pi_acts = np.zeros(shape=(self.cfg.particles,
+                                      math.ceil(self.cfg.popsize * self.cfg.mix_coeff),
+                                      self.cfg.horizon,
                                       self.act_dim))
-            print('popsize:', self.cfg.popsize)
-            print('pi:', pi_acts.shape[1])
-            print('trajs:', trajs.shape[1])
-            assert pi_acts.shape[1] + trajs.shape[1] == self.cfg.popsize
+            assert pi_acts.shape[1] + stoch_acts.shape[1] == self.cfg.popsize
 
         for i in range(self.cfg.horizon):
             # store traj
@@ -107,7 +106,7 @@ class Agent(Base):
 
             if pi:
                 # sample some actions from policy
-                z = self.model.get_z0(hist[:, -int(self.cfg.popsize * self.cfg.mix_coeff):, :, :],
+                z = self.model.get_z0(hist[:, -math.ceil(self.cfg.popsize * self.cfg.mix_coeff):, :, :],
                                       plan=True)  # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
                 pi_actions = self.pi.sample_pi(z)  # [particles, pi_actions, act_dim]
 
@@ -171,7 +170,7 @@ class Agent(Base):
             # cem optimisation loop
             while (t < self.cfg.max_iters) and (torch.max(var) > self.cfg.epsilon):
                 # sample stochastic actions
-                stoch_samples = int(self.cfg.popsize * (1 - self.cfg.mix_coeff))
+                stoch_samples = math.floor(self.cfg.popsize * (1 - self.cfg.mix_coeff))
                 dist = TruncatedNormal(loc=mean, scale=var, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
                 stoch_acts = dist.sample(
                     sample_shape=[stoch_samples, ])  # output popsize x horizon x action_dims matrix

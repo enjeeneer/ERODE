@@ -68,7 +68,7 @@ class Base:
             old_action_dict = prev_action.copy()
             new_action_dict = {}
             for key, _ in old_action_dict.items():
-                if key in self.cfg.cont_actions:
+                if key in self.cfg.continuous_actions:
                     delta_cont = np.random.uniform(-self.expl_deltas[key], self.expl_deltas[key])
                     candidate_action = old_action_dict[key][0] + delta_cont
                     # equation 3.3 in FYR

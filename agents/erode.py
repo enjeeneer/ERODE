@@ -230,30 +230,13 @@ class Agent(Base):
                 model_loss.backward()
                 self.optimiser.step()
 
-            # policy training
+            # policy and value training
             with torch.no_grad():
                 zs = self.model.get_z0(inp_trajs)  # [traj_batches, horizon, 1]
+                zs_ = self.model.get_z0(obs_trajs) # [traj_batches, horizon, 1]
+
             pi_loss = self.update_pi(zs)
-
-            # value function training
-            value_loss = 0
-            zs = zs.detach()
-            zs_ = self.model.get_z0(obs_trajs).detach()
-            for t in range(self.cfg.horizon):
-                self.Q1.optimizer.zero_grad()
-                self.Q2.optimizer.zero_grad()
-
-                Q1, Q2 = self.Q(zs[:, t, :], act_trajs[:, t, :])
-                z_, reward = zs_[:, t, :], reward_trajs[:, t, :]
-                td_target = self.td_target(z_, reward)
-
-                # losses
-                rho = (self.cfg.rho ** t)
-                value_loss += rho * (F.mse_loss(Q1, td_target) + F.mse_loss(Q2, td_target))
-
-            value_loss.backward()
-            self.Q1.optimizer.step()
-            self.Q2.optimizer.step()
+            value_loss = self.update_q(zs, zs_, act_trajs, reward_trajs)
 
         # update target networks
         if self.cfg.update_freq % self.n_steps == 0:
@@ -263,6 +246,48 @@ class Agent(Base):
         self.memory.clear_memory()
 
         return model_loss, pi_loss, value_loss
+
+    def update_pi(self, zs):
+        """
+        Updates policy given a trajectory of latent states to horizon H. It minimises the negative q-value i.e
+        it maximises the value of the trajectory.
+        :param zs: vector of latent states of shape (batch_size, horizon, latent_dim)
+        """
+        self.pi.optimizer.zero_grad(set_to_none=True)
+        self.track_q_grad(False)
+
+        # loss is a weighted sum of q values
+        pi_loss = 0
+        for t in range(self.cfg.horizon):
+            action = self.sample_pi(zs[:, t, :])
+            q = torch.min(*self.Q(zs[:, t, :], action))
+            pi_loss += -q.mean() * (self.cfg.rho ** t) # minimise negative Q i.e. maximise value
+
+        pi_loss.backward()
+        self.pi.optimizer.step()
+        self.track_q_grad(True)
+
+        return pi_loss
+
+    def update_q(self, zs, zs_, act_trajs, reward_trajs):
+        """
+        Updates value networks given batched trajectories of latent states
+        """
+        self.Q1.optimizer.zero_grad()
+        self.Q2.optimizer.zero_grad()
+        value_loss = 0
+        for t in range(self.cfg.horizon):
+            Q1, Q2 = self.Q(zs[:, t, :], act_trajs[:, t, :])
+            z_, reward = zs_[:, t, :], reward_trajs[:, t, :]
+            td_target = self.td_target(z_, reward)
+
+            # losses
+            rho = (self.cfg.rho ** t)
+            value_loss += rho * (F.mse_loss(Q1, td_target) + F.mse_loss(Q2, td_target))
+
+        value_loss.backward()
+        self.Q1.optimizer.step()
+        self.Q2.optimizer.step()
 
     def td_target(self, z_, reward):
         """
@@ -314,27 +339,6 @@ class Agent(Base):
             return act
 
         return mu
-
-    def update_pi(self, zs):
-        """
-        Updates policy given a trajectory of latent states to horizon H (we likely want to batch this)
-        :param zs: vector of latent states
-        """
-        self.pi.optimizer.zero_grad(set_to_none=True)
-        self.track_q_grad(False)
-
-        # loss is a weighted sum of q values
-        pi_loss = 0
-        for t, z in enumerate(zs):
-            action = self.sample_pi(z)
-            q = torch.min(*self.Q(z, action))
-            pi_loss += -q.mean() * (self.cfg.rho ** t)
-
-        pi_loss.backward()
-        self.pi.optimizer.step()
-        self.track_q_grad(True)
-
-        return pi_loss
 
     @torch.no_grad()
     def estimate_value(self, trajs, actions):

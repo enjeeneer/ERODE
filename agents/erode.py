@@ -92,6 +92,9 @@ class Agent(Base):
         if pi:
             pi_acts = np.zeros(shape=(self.cfg.particles, int(self.cfg.popsize * self.cfg.mix_coeff), self.cfg.horizon,
                                       self.act_dim))
+            print('popsize:', self.cfg.popsize)
+            print('pi:', pi_acts.shape[1])
+            print('trajs:', trajs.shape[1])
             assert pi_acts.shape[1] + trajs.shape[1] == self.cfg.popsize
 
         for i in range(self.cfg.horizon):

@@ -40,11 +40,11 @@ class Agent(Base):
         # REWARD PARAMS
         temp_idx = []
         for temp in self.cfg.temp_reward:
-            idx = self.obs_space.index(temp)
+            idx = self.normaliser.obs_space.index(temp)
             temp_idx.append(idx)
         self.temp_idx = temp_idx
-        self.energy_idx = self.obs_space.index(self.cfg.energy_reward_key)
-        self.c02_idx = self.obs_space.index(self.cfg.c02_reward_key)
+        self.energy_idx = self.normaliser.obs_space.index(self.cfg.energy_reward_key)
+        self.c02_idx = self.normaliser.obs_space.index(self.cfg.c02_reward_key)
 
         # EXPLORATION PARAMS
         lower = self.normaliser.action_lower_bound
@@ -63,7 +63,7 @@ class Agent(Base):
         self.disc_vector = torch.tensor(gamma_list, dtype=torch.float32).unsqueeze(0)  # [1, horizon]
         self.disc_tensor = torch.tile(self.disc_vector, dims=(self.cfg.particles, self.cfg.popsize, 1))
 
-        super(Agent, self).__init__(self.env, self.normaliser, self.memory, self.cfg, self.act_dim, self.obs_space,
+        super(Agent, self).__init__(self.env, self.normaliser, self.memory, self.cfg, self.act_dim, self.normaliser.obs_space,
                                     self.n_steps, self.expl_deltas)
 
     @torch.no_grad()

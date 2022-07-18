@@ -9,8 +9,8 @@ class Normalize:
         self.env = env
         self.cfg = cfg
         self.device = device
-        self.act_space = [key for key in env.get_inputs_names() if key not in cfg.red_act]
-        self.obs_space = [key for key in env.get_outputs_names() if key not in cfg.red_obs]
+        self.act_space = [key for key in env.get_inputs_names() if key not in cfg.redundant_actions]
+        self.obs_space = [key for key in env.get_outputs_names() if key not in cfg.redundant_observations]
 
         ### OUTPUT SPACE BOUNDS ###
         upper_bound = {}
@@ -67,8 +67,8 @@ class Normalize:
         # get output keys
         output_cp = deepcopy(outputs)
         # drop redundant features
-        if len(self.cfg.red_obs) > 0:
-            for key in self.cfg.red_obs:
+        if len(self.cfg.redundant_observations) > 0:
+            for key in self.cfg.redundant_observations:
                 if key in output_cp:
                     del output_cp[key]
 
@@ -125,7 +125,7 @@ class Normalize:
             actions_dict[key] = actions_cp[i]
 
         # un-normalise values
-        for key in self.cfg.cont_actions:
+        for key in self.cfg.continuous_actions:
             revert = ((actions_dict[key] + 1) / 2) * (self.action_upper_bound[key] - self.action_lower_bound[key]) \
                      + self.action_lower_bound[key]
 
@@ -134,8 +134,8 @@ class Normalize:
                                          a_max=self.action_upper_bound[key])]
 
         # add dummy variables for redundant actions
-        if len(self.cfg.red_act) > 0:
-            for key in self.cfg.red_act:
+        if len(self.cfg.redundant_actions) > 0:
+            for key in self.cfg.redundant_actions:
                 actions_dict[key] = [float(0)]
 
         # manually interpret discrete elements of action array
@@ -157,13 +157,13 @@ class Normalize:
         working_dict = deepcopy(action_dict)
 
         # normalise continuous actions
-        for key in self.cfg.cont_actions:
+        for key in self.cfg.continous_actions:
             working_dict[key][0] = 2 * (working_dict[key][0] - self.action_lower_bound[key]) / (
                     self.action_upper_bound[key] - self.action_lower_bound[key]) - 1
 
         # drop redundant actions
-        if len(self.cfg.red_act) > 0:
-            for key in self.cfg.red_act:
+        if len(self.cfg.redundant_actions) > 0:
+            for key in self.cfg.redundant_actions:
                 working_dict.pop(key)
 
         actions = np.array(list(working_dict.values()), dtype=float).reshape(len(working_dict.values()), )

@@ -16,13 +16,13 @@ class Agent(Base):
         self.cfg = cfg
         self.env = env
         self.device = device
+        self.normaliser = Normalize(self.env, cfg=self.cfg, device=device)
         self.obs_dim = len(self.normaliser.obs_space)
         self.act_dim = len(self.normaliser.act_space)
         self.obs_act_dim = self.obs_dim + self.cfg.time_dim + self.act_dim
         self.n_steps = 0
         self.model_path = os.path.join(cfg.models_dir, 'model.pth')
         self.exploration_steps = self.cfg.exploration_mins / self.cfg.mins_per_step
-        self.normaliser = Normalize(self.env, cfg=self.cfg, device=device)
 
         # COMPONENTS
         self.memory = ErodeMemory(cfg=self.cfg, obs_dim=self.obs_dim + self.cfg.time_dim,

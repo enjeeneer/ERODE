@@ -88,7 +88,7 @@ class Agent(Base):
         # initialise trajectory and pi_action arrays
         trajs = np.zeros(
             shape=(self.cfg.particles, self.cfg.popsize * (1 - self.cfg.mix_coeff), self.cfg.horizon,
-                   self.cfg.state_dim + self.cfg.time_dim))
+                   self.cfg.obs_dim + self.cfg.time_dim))
         if pi:
             pi_acts = np.zeros(shape=(self.cfg.particles, self.cfg.popsize * self.cfg.mix_coeff, self.cfg.horizon,
                                       self.act_dim))
@@ -122,7 +122,7 @@ class Agent(Base):
             # predict
             model_input = torch.tensor(input, dtype=torch.float).to(self.device)
             pred_states = self.model.predict_next_state(history=model_input, train=False)
-            assert pred_states.shape == (self.cfg.particles, self.cfg.popsize, self.cfg.state_dim)
+            assert pred_states.shape == (self.cfg.particles, self.cfg.popsize, self.obs_dim)
 
             # add time
             pred_states = self.normaliser.update_time(state_tensor=pred_states, init_date=self.TS_init_date,

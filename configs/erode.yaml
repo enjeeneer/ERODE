@@ -36,6 +36,8 @@ mix_coeff: 0.05
 q_dim: 200
 q_lr: 0.003
 rho: 0.5
+tau: 0.01
+update_freq: 1
 
 # ode solver params
 solver: 'dopri5'

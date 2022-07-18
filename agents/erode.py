@@ -238,12 +238,13 @@ class Agent(Base):
             # value function training
             value_loss = 0
             zs = zs.detach()
+            zs_ = self.model.get_z0(obs_trajs).detach()
             for t in range(self.cfg.horizon):
                 self.Q1.optimizer.zero_grad()
                 self.Q2.optimizer.zero_grad()
 
                 Q1, Q2 = self.Q(zs[:, t, :], act_trajs[:, t, :])
-                z_, reward = zs[:, t + 1, :], reward_trajs[:, t, :]
+                z_, reward = zs_[:, t, :], reward_trajs[:, t, :]
                 td_target = self.td_target(z_, reward)
 
                 # losses
@@ -253,6 +254,11 @@ class Agent(Base):
             value_loss.backward()
             self.Q1.optimizer.step()
             self.Q2.optimizer.step()
+
+        # update target networks
+        if self.cfg.update_freq % self.n_steps == 0:
+            self.update_target_net(self.Q1, self.Q1_target, tau=self.cfg.tau)
+            self.update_target_net(self.Q2, self.Q2_target, tau=self.cfg.tau)
 
         self.memory.clear_memory()
 
@@ -266,6 +272,14 @@ class Agent(Base):
         td_target = reward + self.cfg.gamama * torch.min(*self.Q(z_, a_, target=True))
 
         return td_target
+
+    def update_target_net(self, model, model_target, tau):
+        """
+        Update slow-moving average of online network (target network) at rate tau.
+        """
+        with torch.no_grad():
+            for p, p_target in zip(model.parameters(), model_target.parameters()):
+                p_target.data.lerp_(p.data, tau)
 
     def Q(self, z, a, target=False):
         """

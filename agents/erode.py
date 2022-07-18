@@ -1,5 +1,6 @@
 import os
 import torch
+import math
 import torch.nn.functional as F
 import numpy as np
 from components.networks import LatentODE, MLP, Q
@@ -87,10 +88,10 @@ class Agent(Base):
 
         # initialise trajectory and pi_action arrays
         trajs = np.zeros(
-            shape=(self.cfg.particles, int(self.cfg.popsize * (1 - self.cfg.mix_coeff)), self.cfg.horizon,
+            shape=(self.cfg.particles, math.floor(self.cfg.popsize * (1 - self.cfg.mix_coeff)), self.cfg.horizon,
                    self.obs_dim + self.cfg.time_dim))
         if pi:
-            pi_acts = np.zeros(shape=(self.cfg.particles, int(self.cfg.popsize * self.cfg.mix_coeff), self.cfg.horizon,
+            pi_acts = np.zeros(shape=(self.cfg.particles, math.ceil(self.cfg.popsize * self.cfg.mix_coeff), self.cfg.horizon,
                                       self.act_dim))
             print('popsize:', self.cfg.popsize)
             print('pi:', pi_acts.shape[1])

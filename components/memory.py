@@ -12,7 +12,7 @@ class ErodeMemory:
         self.act_dim = act_dim
         self.net_inp_dims = net_inp_dims
         self.history = np.zeros(shape=(cfg.hist_length, self.net_inp_dims))
-        self.mem_ctr = 0
+        self.mem_ctr = int(0)
 
     def sample(self):
         """
@@ -72,13 +72,13 @@ class ErodeMemory:
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim,)
         :param observation: normalised array of observations of shape (observation,)
         '''
+        self.mem_ctr += 1
         index = self.mem_size % self.mem_ctr
 
         self.model_inputs[index] = model_input
         self.obs_[index - 1] = obs #
         self.rewards[index] = reward
 
-        self.mem_ctr += 1
 
     def store_history(self, state_action):
         '''

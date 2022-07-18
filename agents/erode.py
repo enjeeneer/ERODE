@@ -375,7 +375,7 @@ class Agent(Base):
         temp_elements = trajs_revert[:, :, :, self.temp_idx]
         temp_penalties = torch.minimum((self.cfg.low_temp_goal - temp_elements) ** 2,
                                    (self.cfg.high_temp_goal - temp_elements) ** 2) * -self.cfg.theta
-        temp_rewards = torch.where((self.cfg.low_temp_goal >= temp_elements) | (self.self.cfg.high_temp_goal <= temp_elements), temp_penalties,
+        temp_rewards = torch.where((self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), temp_penalties,
                                torch.tensor([0.0], dtype=torch.double))  # zero if in correct range, penalty otherwise
         temp = torch.sum(temp_rewards, axis=[3])  # [particles, popsize, horizon]
 

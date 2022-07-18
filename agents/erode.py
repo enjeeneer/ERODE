@@ -388,9 +388,8 @@ class Agent(Base):
         # total
         total = c02 + temp
         total_disc = total * self.disc_tensor
-        total_norm = self.normaliser.rewards(total_disc)  # [particles, popsize, horizon]
-        total_norm = torch.sum(total_norm, dim=2)  # [particles, popsize]
-        rewards = total_norm + term_vals
+        total_disc = torch.sum(total_disc, dim=2)  # [particles, popsize]
+        rewards = total_disc + term_vals
 
         exp_rewards = torch.mean(rewards, dim=0)  # [popsize]
 

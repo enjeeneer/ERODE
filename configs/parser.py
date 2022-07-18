@@ -16,11 +16,11 @@ def parse_cfg(agent_cfg_path: str, env_cfg_path: str, env_name: str) -> Union[Di
         # cO2 data
         cO2_path = 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
         cO2_data = pd.read_pickle(cO2_path)
-        base.cO2_year = 2017
-        base.cO2_dt_col = 'datetime'
-        base.cO2_carbon_col = 'carbon_intensity_avg'
-        base.cO2_low = float(cO2_data[base.cO2_carbon_col].sort_values(ascending=True).values[0])
-        base.cO2_high = float(cO2_data[base.cO2_carbon_col].sort_values(ascending=True).values[-1])
+        base.c02_year = 2017
+        base.c02_dt_col = 'datetime'
+        base.c02_carbon_col = 'carbon_intensity_avg'
+        base.c02_low = float(cO2_data[base.c02_carbon_col].sort_values(ascending=True).values[0])
+        base.c02_high = float(cO2_data[base.c02_carbon_col].sort_values(ascending=True).values[-1])
 
     elif env_name == "SeminarcenterThermostat-v0":
         base.merge_with(env.SeminarcenterThermal)
@@ -31,11 +31,11 @@ def parse_cfg(agent_cfg_path: str, env_cfg_path: str, env_name: str) -> Union[Di
         # cO2 data
         cO2_path = 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
         cO2_data = pd.read_pickle(cO2_path)
-        base.cO2_year = 2017
-        base.cO2_dt_col = 'datetime'
-        base.cO2_carbon_col = 'carbon_intensity_avg'
-        base.cO2_low = cO2_data[base.cO2_carbon_col].sort_values(ascending=True).values[0]
-        base.cO2_high = cO2_data[base.cO2_carbon_col].sort_values(ascending=True).values[-1]
+        base.c02_year = 2017
+        base.c02_dt_col = 'datetime'
+        base.c02_carbon_col = 'carbon_intensity_avg'
+        base.c02_low = cO2_data[base.c02_carbon_col].sort_values(ascending=True).values[0]
+        base.c02_high = cO2_data[base.c02_carbon_col].sort_values(ascending=True).values[-1]
 
     return base
 

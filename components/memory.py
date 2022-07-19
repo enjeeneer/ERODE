@@ -37,7 +37,7 @@ class ErodeMemory:
             # index memory
             inps = self.model_inputs[traj_idxs]
             acts = self.actions[traj_idxs]
-            obs = self.obs_next[traj_idxs]
+            obs = self.obs_[traj_idxs]
             rewards = self.rewards[traj_idxs]
 
             # add to sample

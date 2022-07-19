@@ -10,7 +10,7 @@ expl_del: 0.05
 low_temp_goal: 19
 high_temp_goal: 24
 theta: 1000
-exploration_mins: 180
+exploration_mins: 1800
 
 # cem params
 init_var: 0.25

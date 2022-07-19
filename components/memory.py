@@ -41,6 +41,8 @@ class ErodeMemory:
             rewards = self.rewards[traj_idxs]
 
             # add to sample
+            print(inp_trajs.shape)
+            print(inps.shape)
             inp_trajs[i, :, :] = inps
             act_trajs[i, :, :] = acts
             obs_trajs[i, :, :] = obs

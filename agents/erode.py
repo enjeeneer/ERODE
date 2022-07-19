@@ -197,7 +197,8 @@ class Agent(Base):
                 t += 1
 
             opt_actions = mean
-            action = opt_actions[0].cpu().detach().numpy()  # take only first action
+            action = opt_actions[0, :].cpu().detach().numpy()  # take only first action
+            print(action.shape)
 
             # variables for memory
             state_action = np.concatenate((action, obs), axis=0)  # create state/action

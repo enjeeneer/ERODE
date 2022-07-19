@@ -172,7 +172,7 @@ class Agent(Base):
                 # sample stochastic actions
                 stoch_samples = math.floor(self.cfg.popsize * (1 - self.cfg.mix_coeff))
                 dist = TruncatedNormal(loc=mean, scale=var, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
-                stoch_acts = dist.sample(sample_shape=[stoch_samples, ]).float()
+                stoch_acts = dist.sample(sample_shape=[stoch_samples,]).float()
                 stoch_acts = torch.where(stoch_acts < torch.tensor([-1.0], device=self.device),
                                          torch.tensor([-1.0], device=self.device),
                                          stoch_acts)  # clip
@@ -197,7 +197,6 @@ class Agent(Base):
 
             opt_actions = mean
             action = opt_actions[0, :].cpu().detach().numpy()  # take only first action
-            print(action.shape)
 
             # variables for memory
             state_action = np.concatenate((action, obs), axis=0)  # create state/action

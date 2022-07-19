@@ -138,7 +138,8 @@ class Agent(Base):
 
             state_tile = pred_states.cpu().detach().numpy()
 
-        combined_acts = np.concatenate((stoch_acts, pi_acts), axis=1).squeeze(axis=0)  # [particles, popsize, horizon, act_dim]
+        combined_acts = np.concatenate((stoch_acts, pi_acts), axis=1)  # [particles, popsize, horizon, act_dim]
+        combined_acts = combined_acts[0, :, :, :] # particles are identical so take first particle to reduce dim
         assert combined_acts.shape == (self.cfg.popsize, self.cfg.horizon, self.act_dim)
 
         return trajs, combined_acts

@@ -187,11 +187,12 @@ class Agent(Base):
                 combined_acts = combined_acts[0, :, :, :] # particles are identical so take first particle to reduce dim
                 elites = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
 
-                new_mean = np.mean(elites, axis=0)
-                new_var = np.var(elites, axis=0)
+                elites = torch.tensor([elites]).to(self.device)
+                new_mean = torch.mean(elites, axis=0)
+                new_var = torch.var(elites, axis=0)
 
-                mean = torch.tensor([self.cfg.kappa * mean + (1 - self.cfg.kappa) * new_mean]).to(self.device)
-                var = torch.tensor([self.cfg.kappa * var + (1 - self.cfg.kappa) * new_var]).to(self.device)
+                mean = self.cfg.kappa * mean + (1 - self.cfg.kappa) * new_mean
+                var = self.cfg.kappa * var + (1 - self.cfg.kappa) * new_var
 
                 t += 1
 

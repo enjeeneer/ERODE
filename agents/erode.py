@@ -186,9 +186,8 @@ class Agent(Base):
                 exp_rewards = self.estimate_value(trajs, combined_acts).cpu().detach().numpy()  # returns pi_actions appended to CEM actions
                 combined_acts = combined_acts[0, :, :, :] # particles are identical so take first particle to reduce dim
                 elites = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
-                print(elites.shape)
 
-                elites = torch.tensor([elites]).to(self.device)
+                elites = torch.tensor(elites).to(self.device)
                 new_mean = torch.mean(elites, axis=0)
                 new_var = torch.var(elites, axis=0)
 
@@ -198,7 +197,6 @@ class Agent(Base):
                 t += 1
 
             opt_actions = mean
-            print(opt_actions.shape)
             action = opt_actions[0, :].cpu().detach().numpy()  # take only first action
             print(action.shape)
 

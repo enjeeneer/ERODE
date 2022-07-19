@@ -183,8 +183,8 @@ class Agent(Base):
 
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
 
-                exp_rewards = self.estimate_value(trajs, combined_acts)  # returns pi_actions appended to CEM actions
-                elites = combined_acts[torch.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
+                exp_rewards = self.estimate_value(trajs, combined_acts).cpu().detach().numpy()  # returns pi_actions appended to CEM actions
+                elites = combined_acts[exp_rewards][:int(self.cfg.elites * self.cfg.popsize)]
 
                 new_mean = torch.mean(elites, axis=0)
                 new_var = torch.var(elites, axis=0)

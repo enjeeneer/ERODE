@@ -26,7 +26,7 @@ class Agent(Base):
         self.exploration_steps = self.cfg.exploration_mins / self.cfg.mins_per_step
 
         # COMPONENTS
-        self.memory = ErodeMemory(cfg=self.cfg, obs_dim=self.obs_dim + self.cfg.time_dim,
+        self.memory = ErodeMemory(cfg=self.cfg, obs_dim=self.obs_dim,
                                   act_dim=self.act_dim, net_inp_dims=self.obs_act_dim)
         self.Q1, self.Q2 = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
         self.Q1_target, self.Q2_target = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
@@ -147,6 +147,7 @@ class Agent(Base):
     def plan(self, observation, env, prev_action):
 
         obs = self.normaliser.outputs(outputs=observation, env=env, for_memory=False)
+        obs_mem = self.normaliser.outputs(outputs=observation, env=env, for_memory=True)
 
         # Exploration Policy
         if self.n_steps <= self.exploration_steps:
@@ -209,7 +210,7 @@ class Agent(Base):
 
         self.memory.store_history(state_action)
 
-        return action_dict, action, model_input, obs
+        return action_dict, action, model_input, obs_mem
 
     def learn(self):
         '''

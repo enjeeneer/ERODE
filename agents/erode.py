@@ -30,8 +30,7 @@ class Agent(Base):
                                   act_dim=self.act_dim, net_inp_dims=self.obs_act_dim)
         self.Q1, self.Q2 = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
         self.Q1_target, self.Q2_target = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
-        self.pi = MLP(output_dims=self.act_dim, input_dims=cfg.latent_dim,
-                                       chkpt_path=self.cfg.models_dir, device=device)
+        self.pi = MLP(output_dims=self.act_dim, input_dims=cfg.latent_dim, chkpt_path=self.cfg.models_dir, device=device)
         self.model = LatentODE(cfg, obs_act_dim=self.obs_act_dim, obs_dim=self.obs_dim, device=device)
         self.model.to(device)
         self.optimiser = torch.optim.Adamax(self.model.parameters(), lr=cfg.alpha)
@@ -336,7 +335,7 @@ class Agent(Base):
         :param z: latent state (latent_dim)
         :param std: standard deviation for applying noise to sample
         """
-
+        print(z.shape)
         mu = self.pi(z)
         if std > 0:
             std = torch.ones_like(mu) * std

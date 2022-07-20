@@ -26,7 +26,7 @@ class ErodeMemory:
 
         # samples trajectories
         inp_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.cfg.hist_length+1, self.net_inp_dims))
-        obs_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.cfg.hist_length + 1, self.obs_dim))
+        obs_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.cfg.hist_length + 1, self.net_inp_dims))
         act_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.act_dim))
         reward_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, 1))
 

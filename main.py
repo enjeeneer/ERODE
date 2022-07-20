@@ -26,13 +26,13 @@ if __name__ == '__main__':
         years = 1
 
         ## WANDB SETUP ###
-        # wandb.init(
-        #     project='erode',
-        #     entity="enjeeneer",
-        #     config=dict(cfg),
-        #     tags=['erode-testing'],
-        # )
-        # wandb.config.update(dict(cfg))
+        wandb.init(
+            project='erode',
+            entity="enjeeneer",
+            config=dict(cfg),
+            tags=['erode-testing'],
+        )
+        wandb.config.update(dict(cfg))
 
         N = int((60 * 24) / cfg.mins_per_step)  # make model updates at end of each day
         steps_per_day = int((60 * 24) / cfg.mins_per_step)

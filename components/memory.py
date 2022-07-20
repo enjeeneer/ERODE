@@ -75,10 +75,10 @@ class ErodeMemory:
         '''
         index = self.mem_ctr % self.mem_size
 
-        self.model_inputs[index, :, :] = model_input
-        self.actions[index, :] = action
-        self.obs_[index - 1, :] = obs
-        self.rewards[index, :] = reward
+        self.model_inputs[index][:][:] = model_input
+        self.actions[index][:] = action
+        self.obs_[index - 1][:] = obs
+        self.rewards[index][:] = reward
 
         self.mem_ctr += 1
 

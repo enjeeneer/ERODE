@@ -240,9 +240,9 @@ class Agent(Base):
                 self.optimiser.step()
 
             # policy and value training
-            zs = torch.zeros_like(inp_trajs)
-            zs_ = torch.zeros_like(obs_trajs)
             with torch.no_grad():
+                zs = torch.zeros_like(torch.tensor(inp_trajs), device=self.device)
+                zs_ = torch.zeros_like(torch.tensor(obs_trajs), device=self.device)
                 for i in range(self.cfg.horizon):
                     print('inp_trajs:', inp_trajs.shape)
                     z = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]

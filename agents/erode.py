@@ -209,7 +209,7 @@ class Agent(Base):
 
         self.memory.store_history(state_action)
 
-        return action_dict, model_input, obs
+        return action_dict, action, model_input, obs
 
     def learn(self):
         '''
@@ -230,10 +230,10 @@ class Agent(Base):
             self.kl_coef = 1 - 0.99 ** self.kl_cnt
             self.kl_cnt += 1
             for i in range(inp_model.shape[0]):
-                input_batch = torch.tensor(inp_model[i, :, :], dtype=torch.float).to(self.device)
+                input_batch = torch.tensor(inp_model[i, :, :, :], dtype=torch.float).to(self.device)
                 obs_batch = torch.tensor(obs_model[i, :, :], dtype=torch.float).to(self.device)
 
-                pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch)
+                pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch, train=True)
                 model_loss = self.model.loss(pred_state_mean, obs_batch, z_dists, self.kl_coef)
                 self.optimiser.zero_grad()
                 model_loss.backward()

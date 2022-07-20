@@ -61,7 +61,7 @@ if __name__ == '__main__':
                 observation = agent.add_c02(observation)
             score = 0
             for i in tqdm(range(sim_steps)):
-                action_dict, model_input, obs = agent.plan(observation, env, prev_action)
+                action_dict, action, model_input, obs = agent.plan(observation, env, prev_action)
                 obs_next = env.step(action_dict)
                 if agent.cfg.include_grid:
                     obs_next = agent.add_c02(obs_next)
@@ -70,6 +70,7 @@ if __name__ == '__main__':
                 agent.n_steps += 1
                 if agent.n_steps > agent.cfg.hist_length:
                     agent.memory.store(model_input=model_input,
+                                       action=action,
                                        obs=obs,
                                        reward=reward
                                        )

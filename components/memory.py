@@ -25,9 +25,9 @@ class ErodeMemory:
         """
 
         # samples trajectories
-        inp_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.net_inp_dims))
+        inp_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.cfg.hist_length+1, self.net_inp_dims))
+        obs_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.cfg.hist_length + 1, self.obs_dim))
         act_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.act_dim))
-        obs_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.obs_dim))
         reward_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, 1))
 
         traj_batch_starts = np.random.choice(self.mem_size - self.cfg.horizon, size=self.cfg.traj_batches)
@@ -36,25 +36,24 @@ class ErodeMemory:
 
             # index memory
             inps = self.model_inputs[traj_idxs]
+            obs = self.model_inputs[traj_idxs+1] # shift traj by 1 to get obs
             acts = self.actions[traj_idxs]
-            obs = self.obs_[traj_idxs]
             rewards = self.rewards[traj_idxs]
 
             # add to sample
-            print(inp_trajs.shape)
-            print(inps.shape)
-            inp_trajs[i, :, :] = inps
+            inp_trajs[i, :, :, :] = inps
+            obs_trajs[i, :, :, :] = obs
             act_trajs[i, :, :] = acts
-            obs_trajs[i, :, :] = obs
             reward_trajs[i, :, :] = rewards
 
         # samples input/output pairs in batches for model
         model_batches = round(self.mem_size / self.cfg.batch_size)
-        inp_model = np.zeros(shape=(self.mem_size, self.cfg.batch_size, self.net_inp_dims))
-        obs_model = np.zeros(shape=(self.mem_size, self.cfg.batch_size, self.obs_dim))
+        inp_model = np.zeros(shape=(model_batches, self.cfg.batch_size, self.cfg.hist_length+1, self.net_inp_dims))
+        obs_model = np.zeros(shape=(model_batches, self.cfg.batch_size, self.obs_dim))
 
+        # get batch indexes
         model_batch_starts = np.arange(0, self.mem_size, self.cfg.batch_size)
-        idxs = np.random.choice(self.mem_size, size=model_batches*self.cfg.batch_size, replace=True)
+        idxs = np.random.choice(self.mem_size, size=int(model_batches*self.cfg.batch_size), replace=True)
         batches = [idxs[i:i + self.cfg.batch_size] for i in model_batch_starts]
 
         for i, batch in batches:
@@ -63,12 +62,12 @@ class ErodeMemory:
             outs = self.obs[batch]
 
             # add to sample
-            inp_model[i, :, :] = inps
+            inp_model[i, :, :, :] = inps
             obs_model[i, :, :] = outs
 
         return inp_model, obs_model, inp_trajs, act_trajs, obs_trajs, reward_trajs
 
-    def store(self, model_input, obs, reward):
+    def store(self, model_input, action, obs, reward):
         '''
         Stores model_input and correlating observation in memory
         :param state_action: normalised array of state_actions of shape (act_dim+obs_dim,)
@@ -78,7 +77,8 @@ class ErodeMemory:
         index = self.mem_size % self.mem_ctr
 
         self.model_inputs[index] = model_input
-        self.obs_[index - 1] = obs #
+        self.actions[index] = action
+        self.obs_[index - 1] = obs
         self.rewards[index] = reward
 
 

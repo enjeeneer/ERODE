@@ -150,8 +150,8 @@ class Agent(Base):
 
         # Exploration Policy
         if self.n_steps <= self.exploration_steps:
-            action_dict, action_norm = self.explore(prev_action)
-            state_action = np.concatenate((action_norm, obs), axis=0)  # create state/action
+            action_dict, action = self.explore(prev_action)
+            state_action = np.concatenate((action, obs), axis=0)  # create state/action
             state_action = np.expand_dims(state_action, axis=0)  # [1, net_inp_dims]
             model_input = np.concatenate((self.memory.history, state_action),
                                          axis=0)  # create model input [hist_lenght+1, net_inp_dims]

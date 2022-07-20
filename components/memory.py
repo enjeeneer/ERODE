@@ -35,8 +35,6 @@ class ErodeMemory:
             traj_idxs = np.arange(idx, idx+self.cfg.horizon)
 
             # index memory
-            print(traj_idxs)
-            print(traj_idxs+1)
             inps = self.model_inputs[traj_idxs]
             obs = self.model_inputs[traj_idxs+1] # shift traj by 1 to get obs
             acts = self.actions[traj_idxs]
@@ -57,7 +55,7 @@ class ErodeMemory:
         model_batch_starts = np.arange(0, self.mem_size, self.cfg.batch_size)
         idxs = np.random.choice(self.mem_size, size=int(model_batches*self.cfg.batch_size), replace=True)
         batches = [idxs[i:i + self.cfg.batch_size] for i in model_batch_starts]
-
+        print(batches)
         for i, batch in batches:
             # index into memory
             inps = self.model_inputs[batch]

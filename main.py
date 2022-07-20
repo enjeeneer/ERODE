@@ -65,7 +65,7 @@ if __name__ == '__main__':
                 obs_next = env.step(action_dict)
                 if agent.cfg.include_grid:
                     obs_next = agent.add_c02(obs_next)
-                reward = agent.one_step_reward(obs_next, env)
+                reward = agent.one_step_reward(obs_next, main_loop=True, env=env)
                 score += reward
                 agent.n_steps += 1
                 if agent.n_steps > agent.cfg.hist_length:

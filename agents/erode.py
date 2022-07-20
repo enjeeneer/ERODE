@@ -243,9 +243,10 @@ class Agent(Base):
 
             # policy and value training
             with torch.no_grad():
-                zs = self.model.get_z0(inp_trajs)  # [traj_batches, horizon, 1]
-                zs_ = self.model.get_z0(obs_trajs) # [traj_batches, horizon, 1]
+                zs = self.model.get_z0(inp_trajs, plan=True)  # [traj_batches, horizon, 1]
+                zs_ = self.model.get_z0(obs_trajs, plan=True) # [traj_batches, horizon, 1]
 
+            print('zs:', zs.shape)
             pi_loss = self.update_pi(zs)
             value_loss = self.update_q(zs, zs_, act_trajs, reward_trajs)
 

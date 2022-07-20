@@ -234,17 +234,21 @@ class Agent(Base):
                 obs_batch = torch.tensor(obs_model[i, :, :], dtype=torch.float).to(self.device)
 
                 pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch, train=True)
-                print(pred_state_mean.shape)
-                print(obs_batch.shape)
                 model_loss = self.model.loss(pred_state_mean, obs_batch, z_dists, self.kl_coef)
                 self.optimiser.zero_grad()
                 model_loss.backward()
                 self.optimiser.step()
 
             # policy and value training
+            zs = torch.zeros_like(inp_trajs)
+            zs_ = torch.zeros_like(obs_trajs)
             with torch.no_grad():
-                zs = self.model.get_z0(torch.tensor(inp_trajs, device=self.device), train=True)  # [traj_batches, horizon, 1]
-                zs_ = self.model.get_z0(torch.tensor(obs_trajs, device=self.device), train=True) # [traj_batches, horizon, 1]
+                for i in range(self.cfg.horizon):
+                    print('inp_trajs:', inp_trajs.shape)
+                    z = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]
+                    z_ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device), train=True) # [traj_batches, horizon, 1]
+                    zs[:, i, :, :] = z
+                    zs_[:, i, :, :] = z_
 
             print('zs:', zs.shape)
             pi_loss = self.update_pi(zs)

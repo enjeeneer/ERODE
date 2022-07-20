@@ -59,7 +59,7 @@ class ErodeMemory:
         for i, batch in enumerate(batches):
             # index into memory
             inps = self.model_inputs[batch]
-            outs = self.obs[batch]
+            outs = self.obs_[batch]
 
             # add to sample
             inp_model[i, :, :, :] = inps

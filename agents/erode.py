@@ -262,8 +262,6 @@ class Agent(Base):
             self.update_target_net(self.Q1, self.Q1_target, tau=self.cfg.tau)
             self.update_target_net(self.Q2, self.Q2_target, tau=self.cfg.tau)
 
-        self.memory.clear_memory()
-
         return model_loss, pi_loss, value_loss
 
     def update_pi(self, zs):

@@ -90,16 +90,6 @@ class ErodeMemory:
         self.history[:self.cfg.hist_length-1] = self.history[1:]
         self.history[-1] = state_action
 
-    def clear_memory(self):
-        '''
-        Clears working memory after each learning procedure.
-        :return:
-        '''
-        self.model_inputs = []
-        self.obs = []
-        self.obs_next = []
-        self.rewards = []
-
 class ModelBasedMemory:
     def __init__(self, agent, batch_size, window_size, obs_dim, act_dim, particles=20, popsize=50):
         self.state_actions = []

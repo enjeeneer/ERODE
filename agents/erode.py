@@ -253,7 +253,6 @@ class Agent(Base):
                     zs[:, i, :] = torch.mean(z, dim=0) # average over samples from z_dist
                     zs_[:, i, :] = torch.mean(z_, dim=0) # average over samples from z_dist
 
-            print('zs:', zs.shape)
             pi_loss = self.update_pi(zs)
             value_loss = self.update_q(zs, zs_, act_trajs, reward_trajs)
 
@@ -376,27 +375,9 @@ class Agent(Base):
             term_vals = self.terminal_value(term_trajs)  # [particles, popsize]
             assert term_vals.shape == (self.cfg.particles, self.cfg.popsize, 1)
 
-        # unnormalise
-        trajs_revert = self.normaliser.model_predictions_to_tensor(trajs)
-
-        # temps
-        temp_elements = trajs_revert[:, :, :, self.temp_idx]
-        temp_penalties = torch.minimum((self.cfg.low_temp_goal - temp_elements) ** 2,
-                                   (self.cfg.high_temp_goal - temp_elements) ** 2) * -self.cfg.theta
-        temp_rewards = torch.where((self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), temp_penalties,
-                               torch.tensor([0.0], dtype=torch.double))  # zero if in correct range, penalty otherwise
-        temp = torch.sum(temp_rewards, axis=[3])  # [particles, popsize, horizon]
-
-        # c02
-        energy_elements = trajs_revert[:, :, :, self.energy_idx]
-        c02_elements = trajs_revert[:, :, :, self.c02_idx]
-        energy_elements_kwh = (energy_elements * (self.cfg.mins_per_step / 60)) / 1000
-        c02 = (c02_elements * energy_elements_kwh) # [particles, popsize, horizon]
-
-        # total
-        total = c02 + temp
-        total_disc = total * self.disc_tensor
-        rewards = torch.sum(total_disc, dim=2).to(self.device)  # [particles, popsize]
+        rewards, _, _ = self.one_step_reward(trajs)
+        total_disc = rewards * self.disc_tensor
+        rewards = torch.sum(total_disc, dim=2).to(self.device)  # [particles, popsize] sum across horizon
         if self.pi:
             rewards = rewards + torch.squeeze(term_vals).to(self.device)
 
@@ -417,6 +398,41 @@ class Agent(Base):
         qs = torch.min(*self.Q(z0s, acts)) * (self.cfg.gamma ** (self.cfg.horizon + 1))
 
         return qs
+
+    def one_step_reward(self, obs, main_loop=False, env=None):
+        """
+        Can take an abritrary number of observations and calculate the normalised one-step reward.
+        :param obs: normalised obs vector of shape (N, obs_dim)
+        :return: scalar reward of shape (N, 1)
+        """
+        if main_loop:
+            obs = self.normaliser.outputs(obs, env)
+
+        # unnormalise
+        obs = self.normaliser.model_predictions_to_tensor(obs)
+
+        # temps
+        temp_elements = obs[..., self.temp_idx]
+        temp_pens = min(np.absolute(self.cfg.low_temp_goal - temp_elements), np.absolute(self.cfg.high_temp_goal - temp_elements))
+        norm_temp_pens = (-temp_pens / max((self.cfg.lower_t - self.normaliser.output_lower_bound['Z02_T']),
+                                         (self.normaliser.output_upper_bound['Z02_T'] - self.cfg.upper_t))) + 1
+        temp_scores = torch.where(
+            (self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), norm_temp_pens,
+            torch.tensor([1.0], dtype=torch.double))  # zero if in correct range, penalty otherwise
+        temp_reward = np.mean(temp_scores, axis=-1)
+
+        # cO2
+        energy_elements = obs[..., self.energy_idx]
+        min_scalar = (self.cfg.mins_per_step / 60) / 1000
+        energy_elements_kwh = energy_elements * min_scalar
+        cO2_elements = obs[..., self.c02_idx]
+        cO2 = cO2_elements * energy_elements_kwh
+        cO2_reward = (- cO2 / self.normaliser.output_upper_bound[self.cfg.c02_reward] * min_scalar) + 1
+        cO2_reward = self.cfg.theta * cO2_reward
+
+        total_reward = cO2_reward + temp_reward / (self.cfg.theta + 1)
+
+        return total_reward, cO2_reward, temp_reward
 
     def save_models(self):
         '''

@@ -26,13 +26,13 @@ if __name__ == '__main__':
         years = 1
 
         ## WANDB SETUP ###
-        # wandb.init(
-        #     project='erode',
-        #     entity="enjeeneer",
-        #     config=dict(cfg),
-        #     tags=['erode-testing'],
-        # )
-        # wandb.config.update(dict(cfg))
+        wandb.init(
+            project='erode',
+            entity="enjeeneer",
+            config=dict(cfg),
+            tags=['erode-testing'],
+        )
+        wandb.config.update(dict(cfg))
 
         N = int((60 * 24) / cfg.mins_per_step)  # make model updates at end of each day
         steps_per_day = int((60 * 24) / cfg.mins_per_step)
@@ -107,14 +107,14 @@ if __name__ == '__main__':
                     print('date:', day, '/', month, '--',
                           'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
                           'learning steps', learn_iters)
-                    #
-                    # wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
-                    #             'train/emissions': sum(emissions),
-                    #             'train/reward:': score,
-                    #             'train/model_loss': model_loss,
-                    #            'train/policy_loss': policy_loss,
-                    #            'train/value_loss': value_loss,
-                    #        })
+
+                    wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
+                                'train/emissions': sum(emissions),
+                                'train/reward:': score,
+                                'train/model_loss': model_loss,
+                               'train/policy_loss': policy_loss,
+                               'train/value_loss': value_loss,
+                           })
 
                     score = 0
 

@@ -107,14 +107,14 @@ if __name__ == '__main__':
                     print('date:', day, '/', month, '--',
                           'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
                           'learning steps', learn_iters)
-                    #
-                    # wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
-                    #             'train/emissions': sum(emissions),
-                    #             'train/reward:': score,
-                    #             'train/model_loss': model_loss,
-                    #            'train/policy_loss': policy_loss,
-                    #            'train/value_loss': value_loss,
-                    #        })
+
+                    wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
+                                'train/emissions': sum(emissions),
+                                'train/reward:': score,
+                                'train/model_loss': model_loss,
+                               'train/policy_loss': policy_loss,
+                               'train/value_loss': value_loss,
+                           })
 
                     score = 0
 

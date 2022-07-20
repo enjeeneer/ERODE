@@ -55,8 +55,8 @@ class ErodeMemory:
         model_batch_starts = np.arange(0, self.mem_size, self.cfg.batch_size)
         idxs = np.random.choice(self.mem_size, size=int(model_batches*self.cfg.batch_size), replace=True)
         batches = [idxs[i:i + self.cfg.batch_size] for i in model_batch_starts]
-        print(batches)
-        for i, batch in batches:
+
+        for i, batch in enumerate(batches):
             # index into memory
             inps = self.model_inputs[batch]
             outs = self.obs[batch]

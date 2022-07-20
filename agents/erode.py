@@ -247,8 +247,9 @@ class Agent(Base):
                     print('inp_trajs:', inp_trajs.shape)
                     z = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]
                     z_ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device), train=True) # [traj_batches, horizon, 1]
-                    zs[:, i, :, :] = z.float()
-                    zs_[:, i, :, :] = z_.float()
+                    print(z)
+                    zs[:, i, :, :] = z
+                    zs_[:, i, :, :] = z_
 
             print('zs:', zs.shape)
             pi_loss = self.update_pi(zs)

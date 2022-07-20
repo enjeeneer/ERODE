@@ -221,6 +221,10 @@ class Agent(Base):
         print('...updating model parameters...')
         # generate batches
         inp_model, obs_model, inp_trajs, act_trajs, obs_trajs, reward_trajs = self.memory.sample()
+        inp_trajs = torch.tensor(inp_trajs, device=self.device)
+        obs_trajs = torch.tensor(obs_trajs, device=self.device)
+        act_trajs = torch.tensor(act_trajs, device=self.device)
+        reward_trajs = torch.tensor(reward_trajs, device=self.device)
 
         for epoch in range(self.cfg.epochs):
             if epoch % 5 == 0:
@@ -308,7 +312,7 @@ class Agent(Base):
         Computes from a reward and the observation at the following timestep.
         """
         a_ = self.pi(z_, self.cfg.min_std)
-        td_target = reward + self.cfg.gamama * torch.min(*self.Q(z_, a_, target=True))
+        td_target = reward + self.cfg.gamma * torch.min(*self.Q(z_, a_, target=True))
 
         return td_target
 

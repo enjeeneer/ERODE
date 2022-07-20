@@ -241,8 +241,8 @@ class Agent(Base):
 
             # policy and value training
             with torch.no_grad():
-                zs = torch.zeros_like(torch.tensor(inp_trajs), device=self.device)
-                zs_ = torch.zeros_like(torch.tensor(obs_trajs), device=self.device)
+                zs = torch.zeros_like(torch.tensor(inp_trajs), device=self.device).float()
+                zs_ = torch.zeros_like(torch.tensor(obs_trajs), device=self.device).float()
                 for i in range(self.cfg.horizon):
                     print('inp_trajs:', inp_trajs.shape)
                     z = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]

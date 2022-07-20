@@ -74,7 +74,7 @@ class ErodeMemory:
         :param observation: normalised array of observations of shape (observation,)
         '''
         self.mem_ctr += 1
-        index = self.mem_size % self.mem_ctr
+        index = self.mem_ctr % self.mem_size
         print(index)
         self.model_inputs[index] = model_input
         self.actions[index] = action

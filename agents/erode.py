@@ -432,4 +432,4 @@ class Agent(Base):
         """Utility function that enables/disables gradient tracking of Q-networks"""
         for m in [self.Q1, self.Q2]:
             for param in m.parameters():
-                param.requires_grad(enable)
+                param.requires_grad = enable

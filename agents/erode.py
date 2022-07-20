@@ -269,14 +269,14 @@ class Agent(Base):
         :param zs: vector of latent states of shape (batch_size, horizon, latent_dim)
         """
         self.pi.optimizer.zero_grad(set_to_none=True)
-        self.track_q_grad(False)
+        # self.track_q_grad(False)
 
         # loss is a weighted sum of q values
         pi_loss = 0
         for t in range(self.cfg.horizon):
             action = self.sample_pi(zs[:, t, :])
-            print('action:', action)
             q = torch.min(*self.Q(zs[:, t, :], action))
+            print(q)
             pi_loss += -q.mean() * (self.cfg.rho ** t) # minimise negative Q i.e. maximise value
         print('pi_loss:', pi_loss)
         pi_loss.backward()

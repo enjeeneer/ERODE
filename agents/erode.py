@@ -296,7 +296,7 @@ class Agent(Base):
         value_loss = 0
         for t in range(self.cfg.horizon):
             Q1, Q2 = self.Q(zs[:, t, :], act_trajs[:, t, :].float())
-            z_, reward = zs_[:, t, :], reward_trajs[:, t, :]
+            z_, reward = zs_[:, t, :], reward_trajs[:, t, :].float()
             td_target = self.td_target(z_, reward)
 
             # losses

@@ -234,6 +234,8 @@ class Agent(Base):
                 obs_batch = torch.tensor(obs_model[i, :, :], dtype=torch.float).to(self.device)
 
                 pred_state_mean, pred_state_std, z_dists = self.model.predict_next_state(input_batch, train=True)
+                print(pred_state_mean.shape)
+                print(obs_batch.shape)
                 model_loss = self.model.loss(pred_state_mean, obs_batch, z_dists, self.kl_coef)
                 self.optimiser.zero_grad()
                 model_loss.backward()

@@ -416,7 +416,7 @@ class Agent(Base):
         print(temp_elements)
         print(self.cfg.low_temp_goal)
         temp_pens = np.minimum(np.absolute(self.cfg.low_temp_goal - temp_elements), np.absolute(self.cfg.high_temp_goal - temp_elements))
-        norm_temp_pens = (-temp_pens / max((self.cfg.low_temp_gosl - self.normaliser.output_lower_bound['Z02_T']),
+        norm_temp_pens = (-temp_pens / max((self.cfg.low_temp_goal - self.normaliser.output_lower_bound['Z02_T']),
                                          (self.normaliser.output_upper_bound['Z02_T'] - self.cfg.high_temp_goal))) + 1
         temp_scores = np.where(
             (self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), norm_temp_pens,

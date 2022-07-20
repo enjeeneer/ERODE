@@ -75,7 +75,7 @@ class ErodeMemory:
         '''
         self.mem_ctr += 1
         index = self.mem_ctr % self.mem_size
-        print(index)
+
         self.model_inputs[index] = model_input
         self.actions[index] = action
         self.obs_[index - 1] = obs

@@ -275,7 +275,8 @@ class Agent(Base):
         pi_loss = 0
         for t in range(self.cfg.horizon):
             action = self.sample_pi(zs[:, t, :])
-            q = torch.min(*self.Q(zs[:, t, :], action))
+            with torch.no_grad():
+                q = torch.min(*self.Q(zs[:, t, :], action))
             print(q)
             pi_loss += -q.mean() * (self.cfg.rho ** t) # minimise negative Q i.e. maximise value
         print('pi_loss:', pi_loss)

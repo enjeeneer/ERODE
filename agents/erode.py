@@ -246,9 +246,8 @@ class Agent(Base):
                 for i in range(self.cfg.horizon):
                     z, _ = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]
                     z_, _ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device), train=True) # [traj_batches, horizon, 1]
-                    print(z.shape)
-                    zs[:, i, :] = z
-                    zs_[:, i, :] = z_
+                    zs[:, i, :] = torch.mean(z, dim=0) # average over samples from z_dist
+                    zs_[:, i, :] = torch.mean(z_, dim=0) # average over samples from z_dist
 
             print('zs:', zs.shape)
             pi_loss = self.update_pi(zs)

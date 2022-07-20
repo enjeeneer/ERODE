@@ -311,7 +311,7 @@ class Agent(Base):
         """
         Computes from a reward and the observation at the following timestep.
         """
-        a_ = self.pi(z_, self.cfg.min_std)
+        a_ = self.sample_pi(z_)
         td_target = reward + self.cfg.gamma * torch.min(*self.Q(z_, a_, target=True))
 
         return td_target

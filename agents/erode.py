@@ -246,6 +246,7 @@ class Agent(Base):
                 for i in range(self.cfg.horizon):
                     z, _ = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]
                     z_, _ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device), train=True) # [traj_batches, horizon, 1]
+                    print(z.shape)
                     zs[:, i, :] = z
                     zs_[:, i, :] = z_
 

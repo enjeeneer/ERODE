@@ -409,14 +409,14 @@ class Agent(Base):
             obs = self.normaliser.outputs(obs, env)
 
         # unnormalise
-        obs = self.normaliser.model_predictions_to_tensor(obs)
+        obs = self.normaliser.model_predictions_to_tensor(obs).cpu().detach().numpy()
 
         # temps
         temp_elements = obs[..., self.temp_idx]
         temp_pens = min(np.absolute(self.cfg.low_temp_goal - temp_elements), np.absolute(self.cfg.high_temp_goal - temp_elements))
         norm_temp_pens = (-temp_pens / max((self.cfg.lower_t - self.normaliser.output_lower_bound['Z02_T']),
                                          (self.normaliser.output_upper_bound['Z02_T'] - self.cfg.upper_t))) + 1
-        temp_scores = torch.where(
+        temp_scores = np.where(
             (self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), norm_temp_pens,
             torch.tensor([1.0], dtype=torch.double))  # zero if in correct range, penalty otherwise
         temp_reward = np.mean(temp_scores, axis=-1)

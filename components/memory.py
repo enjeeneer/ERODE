@@ -35,6 +35,8 @@ class ErodeMemory:
             traj_idxs = np.arange(idx, idx+self.cfg.horizon)
 
             # index memory
+            print(traj_idxs)
+            print(traj_idxs+1)
             inps = self.model_inputs[traj_idxs]
             obs = self.model_inputs[traj_idxs+1] # shift traj by 1 to get obs
             acts = self.actions[traj_idxs]

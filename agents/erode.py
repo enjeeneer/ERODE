@@ -241,15 +241,15 @@ class Agent(Base):
 
             # policy and value training
             with torch.no_grad():
-                zs = torch.zeros_like(torch.tensor(inp_trajs), device=self.device).float()
-                zs_ = torch.zeros_like(torch.tensor(obs_trajs), device=self.device).float()
+                zs = torch.zeros(size=(inp_trajs.shape[0], self.cfg.horizon, self.cfg.latent_dim), device=self.device).float()
+                zs_ = torch.zeros(size=(obs_trajs.shape[0], self.cfg.horizon, self.cfg.latent_dim), device=self.device).float()
                 for i in range(self.cfg.horizon):
                     print('inp_trajs:', inp_trajs.shape)
                     z = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]
                     z_ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device), train=True) # [traj_batches, horizon, 1]
-                    print(z)
-                    zs[:, i, :, :] = z
-                    zs_[:, i, :, :] = z_
+                    print(z.shape)
+                    zs[:, i, :] = z
+                    zs_[:, i, :] = z_
 
             print('zs:', zs.shape)
             pi_loss = self.update_pi(zs)

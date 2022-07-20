@@ -97,7 +97,7 @@ if __name__ == '__main__':
                 # normal update
                 if agent.n_steps % cfg.steps_per_day == 0:
                     model_loss, pi_loss, value_loss = agent.learn()
-                    agent.save_models()
+                    # agent.save_models()
                     learn_iters += 1
 
                     daily_scores.append(score)

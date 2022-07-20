@@ -30,7 +30,7 @@ class ErodeMemory:
         act_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, self.act_dim))
         reward_trajs = np.zeros(shape=(self.cfg.traj_batches, self.cfg.horizon, 1))
 
-        traj_batch_starts = np.random.choice(self.mem_size - self.cfg.horizon, size=self.cfg.traj_batches)
+        traj_batch_starts = np.random.randint(low=1, high=self.mem_size - self.cfg.horizon, size=self.cfg.traj_batches)
         for i, idx in enumerate(traj_batch_starts):
             traj_idxs = np.arange(idx, idx+self.cfg.horizon)
 
@@ -52,7 +52,7 @@ class ErodeMemory:
         obs_model = np.zeros(shape=(model_batches, self.cfg.batch_size, self.obs_dim))
 
         # get batch indexes
-        model_batch_starts = np.arange(0, self.mem_size, self.cfg.batch_size)
+        model_batch_starts = np.arange(1, self.mem_size, self.cfg.batch_size) # skip 0th entry
         idxs = np.random.choice(self.mem_size, size=int(model_batches*self.cfg.batch_size), replace=True)
         batches = [idxs[i:i + self.cfg.batch_size] for i in model_batch_starts]
 
@@ -75,11 +75,13 @@ class ErodeMemory:
         '''
         self.mem_ctr += 1
         index = self.mem_ctr % self.mem_size
-
-        self.model_inputs[index] = model_input
-        self.actions[index] = action
-        self.obs_[index - 1] = obs
-        self.rewards[index] = reward
+        print('memsize:', self.mem_size)
+        print('index:', index)
+        print(self.model_inputs.shape)
+        self.model_inputs[index, :, :] = model_input
+        self.actions[index, :] = action
+        self.obs_[index - 1, :] = obs
+        self.rewards[index, :] = reward
 
 
     def store_history(self, state_action):

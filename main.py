@@ -91,7 +91,7 @@ if __name__ == '__main__':
                 # exploration phase update
                 if (agent.n_steps < steps_per_day) and (agent.n_steps
                                                         % (agent.cfg.batch_size + agent.cfg.hist_length) == 0):
-                    model_loss, policy_loss, value_loss = agent.learn()
+                    # model_loss, policy_loss, value_loss = agent.learn()
                     learn_iters += 1
 
                 # normal update
@@ -108,13 +108,13 @@ if __name__ == '__main__':
                           'today\'s score %.1f' % score, 'avg score %.1f' % avg_score,
                           'learning steps', learn_iters)
 
-                    wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
-                                'train/emissions': sum(emissions),
-                                'train/reward:': score,
-                                'train/model_loss': model_loss,
-                               'train/policy_loss': policy_loss,
-                               'train/value_loss': value_loss,
-                           })
+                    # wandb.log({'train/mean_zone_temp': np.mean(temps[-cfg.steps_per_day:]),
+                    #             'train/emissions': sum(emissions),
+                    #             'train/reward:': score,
+                    #             'train/model_loss': model_loss,
+                    #            'train/policy_loss': policy_loss,
+                    #            'train/value_loss': value_loss,
+                    #        })
 
                     score = 0
 

@@ -82,7 +82,10 @@ if __name__ == '__main__':
 
                 min, hour, day, month = env.get_date()
 
-                wandb.log({'train/zone2-sp': action_dict['Z02_T_Thermostat_sp'][0],
+                wandb.log({'train/reward': reward,
+                           'train/cO2_reward': cO2_reward,
+                           'train/temp_reward': temp_reward,
+                            'train/zone2-sp': action_dict['Z02_T_Thermostat_sp'][0],
                             'train/hp-T1-sp': action_dict['Bd_T_AHU1_sp'][0],
                             'train/hp-fr1-sp': action_dict['Bd_Fl_AHU1_sp'][0],
                             'train/hp-T2-sp': action_dict['Bd_T_AHU2_sp'][0],
@@ -96,7 +99,7 @@ if __name__ == '__main__':
 
                 # normal update
                 if agent.n_steps % cfg.steps_per_day == 0:
-                    model_loss, pi_loss, value_loss = agent.learn()
+                    model_loss, policy_loss, value_loss = agent.learn()
                     # agent.save_models()
                     learn_iters += 1
 

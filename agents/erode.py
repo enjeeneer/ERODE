@@ -376,9 +376,6 @@ class Agent(Base):
             assert term_vals.shape == (self.cfg.particles, self.cfg.popsize, 1)
 
         rewards, _, _ = self.one_step_reward(trajs)
-        print('rewards:', rewards)
-        print(rewards.shape)
-        print(self.disc_tensor.shape)
         total_disc = torch.tensor(rewards, dtype=torch.float) * self.disc_tensor
         rewards = torch.sum(total_disc, dim=2).to(self.device)  # [particles, popsize] sum across horizon
         if self.pi:
@@ -421,7 +418,7 @@ class Agent(Base):
                                          (self.normaliser.output_upper_bound['Z02_T'] - self.cfg.high_temp_goal))) + 1
         temp_scores = np.where(
             (self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), norm_temp_pens,
-            torch.tensor([1.0], dtype=torch.double))  # zero if in correct range, penalty otherwise
+            torch.tensor([1.0], dtype=torch.double))  # one if in correct range, penalty otherwise
         temp_reward = np.mean(temp_scores, axis=-1)
 
         # cO2

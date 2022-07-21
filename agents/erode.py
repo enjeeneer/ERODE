@@ -379,7 +379,7 @@ class Agent(Base):
         print('rewards:', rewards)
         print(rewards.shape)
         print(self.disc_tensor.shape)
-        total_disc = rewards * self.disc_tensor
+        total_disc = torch.tensor(rewards, dtype=torch.float) * self.disc_tensor
         rewards = torch.sum(total_disc, dim=2).to(self.device)  # [particles, popsize] sum across horizon
         if self.pi:
             rewards = rewards + torch.squeeze(term_vals).to(self.device)

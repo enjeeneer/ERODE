@@ -8,7 +8,7 @@ MixedUse:
         'Bd_Pw_cooling_AHU2',  # AHU 2 cooling power
         'Bd_Pw_cooling_HP',  # heat pump cooling power
         'Bd_Pw_heating_HP',  # heat pump heating power
-        'Fa_Pw_HVAC',  # hvac power consumption
+        'Fa_Pw_All',  # hvac power consumption
     ]
 
     redundant_actions: []  # no redundant actions for this environment
@@ -41,7 +41,7 @@ MixedUse:
         'Z11_T',  # zone 11 temperature
     ]
 
-    energy_reward: 'Fa_Pw_All'  # total power consumption
+    energy_reward: 'Fa_Pw_HVAC'  # hvac power consumption
     c02_reward: 'c02'
     c02_path: 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
     weather: "GRC_A_Athens"

@@ -30,7 +30,8 @@ class Agent(Base):
                                   act_dim=self.act_dim, net_inp_dims=self.obs_act_dim)
         self.Q1, self.Q2 = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
         self.Q1_target, self.Q2_target = Q(cfg, self.act_dim, device=device), Q(cfg, self.act_dim, device=device)
-        self.pi = MLP(output_dims=self.act_dim, input_dims=cfg.latent_dim, chkpt_path=self.cfg.models_dir, device=device)
+        self.pi = MLP(output_dims=self.act_dim, input_dims=cfg.latent_dim, chkpt_path=self.cfg.models_dir,
+                      device=device)
         self.model = LatentODE(cfg, obs_act_dim=self.obs_act_dim, obs_dim=self.obs_dim, device=device)
         self.model.to(device)
         self.optimiser = torch.optim.Adamax(self.model.parameters(), lr=cfg.alpha)
@@ -39,7 +40,7 @@ class Agent(Base):
         self.cem_init_mean = torch.zeros(size=(cfg.horizon, self.act_dim), dtype=torch.float, requires_grad=False).to(
             self.device)
         self.cem_init_var = torch.tile(torch.tensor(cfg.init_var, requires_grad=False),
-                                   (cfg.horizon, self.act_dim)).to(self.device)
+                                       (cfg.horizon, self.act_dim)).to(self.device)
 
         # REWARD PARAMS
         temp_idx = []
@@ -67,7 +68,8 @@ class Agent(Base):
         self.disc_vector = torch.tensor(gamma_list, dtype=torch.float32).unsqueeze(0)  # [1, horizon]
         self.disc_tensor = torch.tile(self.disc_vector, dims=(self.cfg.particles, self.cfg.popsize, 1))
 
-        super(Agent, self).__init__(self.env, self.normaliser, self.memory, self.cfg, self.act_dim, self.normaliser.obs_space,
+        super(Agent, self).__init__(self.env, self.normaliser, self.memory, self.cfg, self.act_dim,
+                                    self.normaliser.obs_space,
                                     self.n_steps, self.expl_deltas)
 
     @torch.no_grad()
@@ -105,13 +107,16 @@ class Agent(Base):
 
             if pi:
                 # sample some actions from policy
-                histories = torch.tensor(hist[:, -math.ceil(self.cfg.popsize * self.cfg.mix_coeff):, :, :], dtype=torch.float).to(self.device)
-                z = self.model.get_z0(histories, plan=True)  # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
+                histories = torch.tensor(hist[:, -math.ceil(self.cfg.popsize * self.cfg.mix_coeff):, :, :],
+                                         dtype=torch.float).to(self.device)
+                z = self.model.get_z0(histories,
+                                      plan=True)  # [particles, pi_actions, latent_dim] -- each particle a different z0 sampled from dist from which pi selects action
                 pi_actions = self.sample_pi(z)  # [particles, pi_actions, act_dim]
 
                 # update pi_act memory to give back to CEM
                 pi_acts[:, :, i, :] = pi_actions.cpu().detach().numpy()
-                actions = np.concatenate((stoch_actions, pi_actions.cpu().detach().numpy()), axis=1)  # [particles, popsize, act_dim]
+                actions = np.concatenate((stoch_actions, pi_actions.cpu().detach().numpy()),
+                                         axis=1)  # [particles, popsize, act_dim]
 
             else:
                 actions = stoch_actions
@@ -172,7 +177,7 @@ class Agent(Base):
                 # sample stochastic actions
                 stoch_samples = math.floor(self.cfg.popsize * (1 - self.cfg.mix_coeff))
                 dist = TruncatedNormal(loc=mean, scale=var, a=-2, b=2)  # range [-2,2] to avoid discontinuity at [-1,1]
-                stoch_acts = dist.sample(sample_shape=[stoch_samples,]).float()
+                stoch_acts = dist.sample(sample_shape=[stoch_samples, ]).float()
                 stoch_acts = torch.where(stoch_acts < torch.tensor([-1.0], device=self.device),
                                          torch.tensor([-1.0], device=self.device),
                                          stoch_acts)  # clip
@@ -182,8 +187,10 @@ class Agent(Base):
 
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
 
-                exp_rewards = self.estimate_value(trajs, combined_acts).cpu().detach().numpy()  # returns pi_actions appended to CEM actions
-                combined_acts = combined_acts[0, :, :, :] # particles are identical so take first particle to reduce dim
+                exp_rewards = self.estimate_value(trajs,
+                                                  combined_acts).cpu().detach().numpy()  # returns pi_actions appended to CEM actions
+                combined_acts = combined_acts[0, :, :,
+                                :]  # particles are identical so take first particle to reduce dim
                 elites = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
 
                 elites = torch.tensor(elites).to(self.device)
@@ -245,13 +252,17 @@ class Agent(Base):
 
             # policy and value training
             with torch.no_grad():
-                zs = torch.zeros(size=(inp_trajs.shape[0], self.cfg.horizon, self.cfg.latent_dim), device=self.device).float()
-                zs_ = torch.zeros(size=(obs_trajs.shape[0], self.cfg.horizon, self.cfg.latent_dim), device=self.device).float()
+                zs = torch.zeros(size=(inp_trajs.shape[0], self.cfg.horizon, self.cfg.latent_dim),
+                                 device=self.device).float()
+                zs_ = torch.zeros(size=(obs_trajs.shape[0], self.cfg.horizon, self.cfg.latent_dim),
+                                  device=self.device).float()
                 for i in range(self.cfg.horizon):
-                    z, _ = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device), train=True)  # [traj_batches, horizon, 1]
-                    z_, _ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device), train=True) # [traj_batches, horizon, 1]
-                    zs[:, i, :] = torch.mean(z, dim=0) # average over samples from z_dist
-                    zs_[:, i, :] = torch.mean(z_, dim=0) # average over samples from z_dist
+                    z, _ = self.model.get_z0(torch.tensor(inp_trajs[:, i, :, :], device=self.device),
+                                             train=True)  # [traj_batches, horizon, 1]
+                    z_, _ = self.model.get_z0(torch.tensor(obs_trajs[:, i, :, :], device=self.device),
+                                              train=True)  # [traj_batches, horizon, 1]
+                    zs[:, i, :] = torch.mean(z, dim=0)  # average over samples from z_dist
+                    zs_[:, i, :] = torch.mean(z_, dim=0)  # average over samples from z_dist
 
             pi_loss = self.update_pi(zs)
             value_loss = self.update_q(zs, zs_, act_trajs, reward_trajs)
@@ -277,7 +288,7 @@ class Agent(Base):
         for t in range(self.cfg.horizon):
             action = self.sample_pi(zs[:, t, :])
             q = torch.min(*self.Q(zs[:, t, :], action))
-            pi_loss += -q.mean() * (self.cfg.rho ** t) # minimise negative Q i.e. maximise value
+            pi_loss += -q.mean() * (self.cfg.rho ** t)  # minimise negative Q i.e. maximise value
         pi_loss.backward()
         self.pi.optimizer.step()
         self.track_q_grad(True)
@@ -303,6 +314,8 @@ class Agent(Base):
         value_loss.backward()
         self.Q1.optimizer.step()
         self.Q2.optimizer.step()
+
+        return value_loss
 
     def td_target(self, z_, reward):
         """
@@ -368,10 +381,12 @@ class Agent(Base):
         # only calculate terminal value if we are using actions sampled from policy
         if self.pi:
             # terminal value
-            term_states = torch.tensor(trajs[:, :, -(self.cfg.hist_length + 1):, :]).to(self.device)  # [particles, popsize, hist_length + 1, state_dim]
-            term_actions = torch.tensor(actions[:, :, -(self.cfg.hist_length + 1):, :]).to(self.device)  # [particles, popsize, hist_length + 1, act_dim]
+            term_states = torch.tensor(trajs[:, :, -(self.cfg.hist_length + 1):, :]).to(
+                self.device)  # [particles, popsize, hist_length + 1, state_dim]
+            term_actions = torch.tensor(actions[:, :, -(self.cfg.hist_length + 1):, :]).to(
+                self.device)  # [particles, popsize, hist_length + 1, act_dim]
             term_trajs = torch.cat([term_actions, term_states],
-                               dim=3).to(self.device)  # [particles, popsize, hist_length + 1, state_act_dim]
+                                   dim=3).to(self.device)  # [particles, popsize, hist_length + 1, state_act_dim]
             term_vals = self.terminal_value(term_trajs)  # [particles, popsize]
             assert term_vals.shape == (self.cfg.particles, self.cfg.popsize, 1)
 
@@ -413,9 +428,10 @@ class Agent(Base):
 
         # temps
         temp_elements = obs[..., self.temp_idx]
-        temp_pens = np.minimum(np.absolute(self.cfg.low_temp_goal - temp_elements), np.absolute(self.cfg.high_temp_goal - temp_elements))
+        temp_pens = np.minimum(np.absolute(self.cfg.low_temp_goal - temp_elements),
+                               np.absolute(self.cfg.high_temp_goal - temp_elements))
         norm_temp_pens = (-temp_pens / max((self.cfg.low_temp_goal - self.normaliser.output_lower_bound['Z02_T']),
-                                         (self.normaliser.output_upper_bound['Z02_T'] - self.cfg.high_temp_goal))) + 1
+                                           (self.normaliser.output_upper_bound['Z02_T'] - self.cfg.high_temp_goal))) + 1
         temp_scores = np.where(
             (self.cfg.low_temp_goal >= temp_elements) | (self.cfg.high_temp_goal <= temp_elements), norm_temp_pens,
             torch.tensor([1.0], dtype=torch.double))  # one if in correct range, penalty otherwise
@@ -427,10 +443,14 @@ class Agent(Base):
         energy_elements_kwh = energy_elements * min_scalar
         cO2_elements = obs[..., self.c02_idx]
         cO2 = cO2_elements * energy_elements_kwh
-        cO2_reward = (- cO2 / self.normaliser.output_upper_bound[self.cfg.c02_reward] * min_scalar) + 1
+        cO2_reward = (- cO2 / self.normaliser.output_upper_bound[self.cfg.energy_reward] * min_scalar * \
+                      self.normaliser.output_upper_bound[self.cfg.c02_reward]) + 1
+        print('c02:', cO2)
+        print('energy upper:', self.normaliser.output_upper_bound[self.cfg.energy_reward] * min_scalar)
+        print('c02 upper:', self.normaliser.output_upper_bound[self.cfg.c02_reward])
         cO2_reward = self.cfg.theta * cO2_reward
 
-        total_reward = cO2_reward + temp_reward / (self.cfg.theta + 1)
+        total_reward = (cO2_reward + temp_reward) / (self.cfg.theta + 1)
 
         return total_reward, cO2_reward, temp_reward
 

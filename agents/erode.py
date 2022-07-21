@@ -169,7 +169,7 @@ class Agent(Base):
             self.TS_init_time = (min, hour)
             self.TS_init_date = (day, month)
 
-            # CEM
+            # MPPI
             print('...planning...')
             mean, var, t = self.cem_init_mean, self.cem_init_var, 0
             # cem optimisation loop
@@ -187,18 +187,25 @@ class Agent(Base):
 
                 trajs, combined_acts = self.traj_sampler(obs, stoch_acts)
 
-                exp_rewards = self.estimate_value(trajs,
-                                                  combined_acts).cpu().detach().numpy()  # returns pi_actions appended to CEM actions
-                combined_acts = combined_acts[0, :, :,
-                                :]  # particles are identical so take first particle to reduce dim
-                elites = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
+                # find elites
+                exp_rewards = self.estimate_value(trajs, combined_acts).cpu().detach().numpy()
+                combined_acts = combined_acts[0, :, :, :]  # particles are identical so take first particle to reduce dim
+                elite_values = exp_rewards[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
+                elite_actions = combined_acts[np.argsort(exp_rewards)][:int(self.cfg.elites * self.cfg.popsize)]
 
-                elites = torch.tensor(elites).to(self.device)
-                new_mean = torch.mean(elites, axis=0)
-                new_var = torch.var(elites, axis=0)
+                # update parameters
+                max_value = exp_rewards.max(0)[0]
+                score = np.exp(self.cfg.temperature * (elite_values - max_value))
+                score /= score.sum(0)
+                mean_ = np.sum(score.unsqueeze(0) * elite_actions, dim=1) / (score.sum(0) + 1e-9)
+                var_ = np.sqrt(np.sum(score.unsqueeze(0)) * (elite_actions - mean_.unsqueeze(1)) ** 2, dim=1) /\
+                        (score.sum(0) + 1e-9)
 
-                mean = self.cfg.kappa * mean + (1 - self.cfg.kappa) * new_mean
-                var = self.cfg.kappa * var + (1 - self.cfg.kappa) * new_var
+                mean_ = torch.tensor(mean_, dtype=torch.float)
+                var_ = torch.tensor(var_, dtype=torch.float)
+
+                mean = self.cfg.momentum * mean + (1 - self.cfg.momentum) * mean_
+                var = self.cfg.momentum * var + (1 - self.cfg.momentum) * var_
 
                 t += 1
 

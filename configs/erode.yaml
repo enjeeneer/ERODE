@@ -12,12 +12,13 @@ high_temp_goal: 24
 theta: 0.5
 exploration_mins: 1800
 
-# cem params
+# mppi params
 init_var: 0.25
 max_iters: 5
 epsilon: 0.001
 elites: 0.1
-kappa: 0.1
+momentum: 0.1
+temperature: 0.5
 
 # ode-rnn params
 hist_length: 3

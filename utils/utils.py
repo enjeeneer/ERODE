@@ -11,8 +11,9 @@ class Normalize:
         self.device = device
         self.act_space = [key for key in env.get_inputs_names() if key not in cfg.redundant_actions]
         self.obs_space = [key for key in env.get_outputs_names() if key not in cfg.redundant_observations]
+        self.month = 1
 
-        ### OUTPUT SPACE BOUNDS ###
+        # OUTPUT SPACE BOUNDS
         upper_bound = {}
         lower_bound = {}
 
@@ -43,7 +44,7 @@ class Normalize:
         self.output_lower_bound_T = torch.tensor(output_lower_bound_T, requires_grad=False)
         self.output_upper_bound_T = torch.tensor(output_upper_bound_T, requires_grad=False)
 
-        ### ACTION SPACE BOUNDS ###
+        # ACTION SPACE BOUNDS
         cont_keys = [p for p in list(self.env.input_space.spaces.keys()) if isinstance(self.env.input_space[p], Box)]
         upper_bound = {}
         lower_bound = {}
@@ -108,7 +109,7 @@ class Normalize:
         :return: Unnormalised tensor of shape: (*, obs_dim)
         '''
 
-        return ((torch.tensor(outputs, dtype=float, requires_grad=False) + 1) / 2) * (
+        return ((torch.tensor(outputs, dtype=torch.float, requires_grad=False) + 1) / 2) * (
                     self.output_upper_bound_T - self.output_lower_bound_T) + self.output_lower_bound_T
 
     def revert_actions(self, actions: np.array):
@@ -145,6 +146,15 @@ class Normalize:
                     actions_dict[key] = [0]
                 else:
                     actions_dict[key] = [1]
+
+        # make sure heating and cooling are opposite in offices
+        if self.cfg.env_name == 'OfficesThermostat-v0':
+            if (self.month <= 5) or (self.month >= 11):
+                actions_dict['Bd_Heating_onoff_sp'] = [1]
+                actions_dict['Bd_Cooling_onoff_sp'] = [0]
+            else:
+                actions_dict['Bd_Heating_onoff_sp'] = [0]
+                actions_dict['Bd_Cooling_onoff_sp'] = [1]
 
         return actions_dict
 

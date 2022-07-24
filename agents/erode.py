@@ -168,6 +168,7 @@ class Agent(Base):
             min, hour, day, month = env.get_date()
             self.TS_init_time = (min, hour)
             self.TS_init_date = (day, month)
+            self.normaliser.month = month
 
             # MPPI
             print('...planning...')
@@ -197,7 +198,7 @@ class Agent(Base):
                 max_value = exp_rewards.max(0)[0]
                 score = np.exp(self.cfg.temperature * (elite_values - max_value))
                 score /= score.sum(0)
-                mean_ = np.sum(score.unsqueeze(0) * elite_actions, dim=1) / (score.sum(0) + 1e-9)
+                mean_ = np.sum(score * elite_actions, dim=1) / (score.sum(0) + 1e-9)
                 var_ = np.sqrt(np.sum(score.unsqueeze(0)) * (elite_actions - mean_.unsqueeze(1)) ** 2, dim=1) /\
                         (score.sum(0) + 1e-9)
 

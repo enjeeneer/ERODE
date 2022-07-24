@@ -14,8 +14,8 @@ def parse_cfg(agent_cfg_path: str, env_cfg_path: str, env_name: str) -> Union[Di
         base.merge_with(env.MixedUse)
 
         # cO2 data
-        cO2_path = 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
-        cO2_data = pd.read_pickle(cO2_path)
+        base.cO2_path = 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
+        cO2_data = pd.read_pickle(base.cO2_path)
         base.c02_year = 2017
         base.c02_dt_col = 'datetime'
         base.c02_carbon_col = 'carbon_intensity_avg'
@@ -29,8 +29,8 @@ def parse_cfg(agent_cfg_path: str, env_cfg_path: str, env_name: str) -> Union[Di
         base.merge_with(env.Offices)
 
         # cO2 data
-        cO2_path = 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
-        cO2_data = pd.read_pickle(cO2_path)
+        base.cO2_path = 'configs/c02_data/greece_2017_c02_intensity_15min.pkl'
+        cO2_data = pd.read_pickle(base.cO2_path)
         base.c02_year = 2017
         base.c02_dt_col = 'datetime'
         base.c02_carbon_col = 'carbon_intensity_avg'

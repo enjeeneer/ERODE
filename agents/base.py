@@ -12,44 +12,8 @@ class Base:
         self.env, self.normaliser, self.memory, self.cfg = env, normaliser, memory, cfg
         self.act_dim, self.obs_space, self.n_steps, self.expl_deltas = act_dim, obs_space, n_steps, expl_deltas
 
-        if 'c02_path' in cfg.keys():
+        if 'cO2_path' in cfg.keys():
             self.c02_data = pd.read_pickle(cfg.c02_path)
-
-    def remember(self, observation, model_input):
-        '''
-        Takes one observation dictionary from the environment and stores in agent memory as normalised array
-        :param observation: dict
-        :param model_input: tensor of input to model of shape (network_input_dims,)
-        '''
-        'ERROR NOT USING ERODE REMEMBER FUNCTION'
-        obs_norm = self.normaliser.outputs(observation, env=self.env, for_memory=True)
-        self.memory.store_memory(state_action=model_input, observation=obs_norm)
-
-    def calculate_reward(self, state_dict):
-        '''
-        Calculates reward from dictionary output of environment
-        :param state_dict: Dictionary defining the state of variables in an observation
-        :return reward: Scalar reward
-        '''
-
-        temp_reward = 0
-        for t in self.cfg.temp_reward:
-            temp = state_dict[t]
-            if (self.cfg.low_temp_goal <= temp) and (temp <= self.cfg.high_temp_goal):
-                pass
-            else:
-                temp_reward -= self.cfg.theta * min((self.cfg.low_temp_goal - temp) ** 2, (self.cfg.high_temp_goal - temp) ** 2)
-
-        if self.cfg.include_grid:
-            c02 = state_dict[self.cfg.c02_reward]  # gCO2/kWh
-            energy_kwh = (state_dict[self.cfg.energy_reward] * (self.cfg.mins_per_step / 60)) / 1000  # kWh
-            c02_reward = -(c02 * energy_kwh)  # gC02
-            reward = c02_reward + temp_reward
-        else:
-            energy_reward = -(state_dict[self.cfg.energy_reward])
-            reward = energy_reward + temp_reward
-
-        return reward
 
     def explore(self, prev_action):
         '''

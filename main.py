@@ -11,9 +11,8 @@ import argparse
 envs = ['MixedUseFanFCU-v0', 'SeminarcenterThermostat-v0', 'OfficesThermostat-v0']
 
 if __name__ == '__main__':
-    # energym setup
-    for env in envs:
 
+    for env in envs:
         agent_cfg_path = 'configs/erode.yaml'
         env_cfg_path = 'configs/envs.yaml'
         cfg = parse_cfg(agent_cfg_path, env_cfg_path, env_name=env)
